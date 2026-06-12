@@ -697,7 +697,86 @@ def cmd_status(args):
                            "[--author ...] --dir <parent-dir>",
         })
     data = _load_book(book_dir)
-    _emit({"ok": True, "exists": True, "phase": data.get("phase", "")})
+    phase = data.get("phase", "")
+    pages = data.get("pages", [])
+    rows = []
+    done = skipped = 0
+    for p in pages:
+        img = (p.get("image_file") or "").strip()
+        is_skipped = img == SKIP_SENTINEL
+        is_done = bool(img)
+        if is_skipped:
+            skipped += 1
+        if is_done:
+            done += 1
+        rows.append({
+            "page_id": p.get("id", ""), "page_no": p.get("page_no", 0),
+            "done": is_done, "skipped": is_skipped,
+            "failed_attempts": int(p.get("failed_attempts", 0)),
+            "image_file": "" if is_skipped else img,
+        })
+    cover_ok = bool((data.get("cover", {}).get("image_file") or "").strip())
+    if phase == "outlining":
+        nxt = "Write the outline (5-12 pages incl cover) and run save-outline."
+    elif phase == "awaiting_outline_confirm":
+        if not cover_ok:
+            nxt = ("Generate the cover (compose-prompt --page cover → image "
+                   "tool → save-image --page cover), show outline+cover, then "
+                   "WAIT for user confirmation before confirm-outline.")
+        else:
+            nxt = ("Show the user the outline + cover and WAIT for explicit "
+                   "confirmation; then confirm-outline (or amend-outline).")
+    elif phase == "illustrating":
+        pending = [r["page_id"] for r in rows if not r["done"]]
+        if pending:
+            nxt = ("Auto-loop the remaining pages %s: compose-prompt → "
+                   "generate → save-image → next; then finalize." % pending)
+        else:
+            nxt = "All pages have images. Run finalize."
+    elif phase == "delivered":
+        nxt = ("Book is delivered. Revisions: amend-page / regenerate → "
+               "save-image → export. The HTML lives next to book.json.")
+    else:
+        nxt = "Unknown phase %r — book.json may be hand-edited; restore from .bak." % phase
+    html = Path(book_dir) / (Path(book_dir).resolve().name + ".html")
+    _emit({
+        "ok": True, "exists": True, "phase": phase,
+        "title": data.get("title", {}), "idea": data.get("idea", ""),
+        "audience": data.get("audience", ""), "style": data.get("style", ""),
+        "author": data.get("author", ""),
+        "cover_done": cover_ok,
+        "pages_total": len(pages), "pages_done": done, "pages_skipped": skipped,
+        "current_page_index": int(data.get("current_page_index", 0)),
+        "pages": rows,
+        "html_exists": html.is_file(),
+        "next_action": nxt,
+    })
+
+
+def cmd_doctor(args):
+    import os
+    py_ok = sys.version_info >= (3, 9)
+    template = Path(__file__).resolve().parents[1] / "assets" / "viewer.template.html"
+    report = {
+        "ok": True,
+        "python_version": "%d.%d.%d" % sys.version_info[:3],
+        "python_ok": py_ok,
+        "viewer_template_ok": template.is_file(),
+        "image_api_key_set": bool(os.environ.get("STORYBOOK_IMAGE_API_KEY")),
+        "image_base_url": os.environ.get("STORYBOOK_IMAGE_BASE_URL",
+                                         "https://api.openai.com/v1"),
+        "image_model": os.environ.get("STORYBOOK_IMAGE_MODEL", "gpt-image-1"),
+        "image_size": os.environ.get("STORYBOOK_IMAGE_SIZE", "1024x1536"),
+    }
+    notes = []
+    if not py_ok:
+        notes.append("python >= 3.9 required")
+    if not report["image_api_key_set"]:
+        notes.append("STORYBOOK_IMAGE_API_KEY unset — fallback image generation "
+                     "(scripts/gen_image.py) unavailable; the host agent's own "
+                     "image tool can still be used")
+    report["notes"] = notes
+    _emit(report)
 
 
 # ── parser / main ───────────────────────────────────────────────────────
@@ -781,6 +860,9 @@ def build_parser():
     p = sub.add_parser("status", help="Phase, progress, and next action.")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("doctor", help="Environment self-check.")
+    p.set_defaults(func=cmd_doctor)
 
     return parser
 

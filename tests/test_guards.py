@@ -204,3 +204,39 @@ class TestAmendGuards(unittest.TestCase):
             code, _, _ = helpers.run_cli("amend-page", "--page", "page-1",
                                          "--json", "not json", "--dir", d)
             self.assertEqual(code, 2)
+
+
+class TestGuardMatrix(unittest.TestCase):
+    """Every state-changing command refuses every disallowed phase with exit 2."""
+
+    MATRIX = [
+        # (argv-builder, allowed phases)
+        (lambda d: ["save-outline", "--file", "-", "--dir", d], {"outlining"}),
+        (lambda d: ["amend-outline", "--dir", d], {"awaiting_outline_confirm"}),
+        (lambda d: ["confirm-outline", "--dir", d], {"awaiting_outline_confirm"}),
+        (lambda d: ["next", "--dir", d], {"illustrating"}),
+        (lambda d: ["skip", "--page", "page-1", "--dir", d], {"illustrating"}),
+        (lambda d: ["finalize", "--dir", d], {"illustrating"}),
+        (lambda d: ["amend-page", "--page", "page-1", "--json", "{}", "--dir", d],
+         {"illustrating", "delivered"}),
+        (lambda d: ["regenerate", "--page", "page-1", "--dir", d],
+         {"illustrating", "delivered"}),
+        (lambda d: ["compose-prompt", "--page", "page-1", "--dir", d],
+         {"illustrating", "delivered"}),
+        (lambda d: ["export", "--dir", d],
+         {"awaiting_outline_confirm", "illustrating", "delivered"}),
+    ]
+
+    def test_matrix(self):
+        import itertools
+        phases = ["outlining", "awaiting_outline_confirm", "illustrating", "delivered"]
+        for (build, allowed), phase in itertools.product(self.MATRIX, phases):
+            if phase in allowed:
+                continue
+            with helpers.tmp() as td:
+                d = helpers.make_book(td, phase=phase, with_images=True)
+                code, out, _ = helpers.run_cli(*build(str(d)))
+                self.assertEqual(
+                    code, 2,
+                    "argv=%s phase=%s expected guard, got %s" % (build(str(d)), phase, out))
+                self.assertEqual(out.get("current_phase"), phase)

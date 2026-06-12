@@ -257,5 +257,34 @@ class TestFinalize(unittest.TestCase):
             self.assertEqual(code, 0)
 
 
+class TestStatusFull(unittest.TestCase):
+    def test_status_reports_progress_and_next_action(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            data = helpers.read_book(d)
+            data["pages"][2]["image_file"] = ""
+            data["pages"][2]["failed_attempts"] = 2
+            data["pages"][3]["image_file"] = "skipped"
+            helpers.write_book(d, data)
+            code, out, _ = helpers.run_cli("status", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(out["phase"], "illustrating")
+            self.assertEqual(out["title"]["zh"], "小狐狸找月亮")
+            self.assertEqual(out["pages_total"], 5)
+            self.assertEqual(out["pages_done"], 4)      # cover/p1/p4 有图 + p3 skipped 也算 done;只有 p2 未完成
+            self.assertEqual(out["pages_skipped"], 1)
+            rows = {p["page_id"]: p for p in out["pages"]}
+            self.assertEqual(rows["page-2"]["failed_attempts"], 2)
+            self.assertFalse(rows["page-2"]["done"])
+            self.assertIn("next", out["next_action"])
+
+    def test_doctor_reports_environment(self):
+        code, out, _ = helpers.run_cli("doctor")
+        self.assertEqual(code, 0)
+        self.assertTrue(out["python_ok"])
+        self.assertTrue(out["viewer_template_ok"])
+        self.assertIn("image_api_key_set", out)
+
+
 if __name__ == "__main__":
     unittest.main()
