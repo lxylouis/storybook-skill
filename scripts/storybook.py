@@ -594,6 +594,76 @@ def cmd_skip(args):
            "next_action": nxt})
 
 
+_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+         ".webp": "image/webp"}
+
+
+def _image_ref(book_dir, image_file, inline):
+    """Resolve a page's image_file to a viewer src (data URI / relative path).
+
+    Empty or sentinel values resolve to "" — the viewer renders its own
+    placeholder; the sentinel string never leaks into the HTML (FDA
+    _clean_image_url parity).
+    """
+    val = (image_file or "").strip()
+    if not val or val == SKIP_SENTINEL:
+        return ""
+    if not inline:
+        return val
+    path = Path(book_dir) / val
+    if not path.is_file():
+        return ""
+    import base64
+    mime = _MIME.get(path.suffix.lower(), "image/png")
+    return "data:%s;base64,%s" % (mime, base64.b64encode(path.read_bytes()).decode("ascii"))
+
+
+def _do_export(book_dir, data, inline):
+    template = Path(__file__).resolve().parents[1] / "assets" / "viewer.template.html"
+    if not template.is_file():
+        _fail("viewer template missing: %s" % template,
+              hint="The skill install is incomplete — re-install the whole "
+                   "storybook-skill directory.")
+    payload = {
+        "title": data.get("title", {}),
+        "author": data.get("author", ""),
+        "style": data.get("style", ""),
+        "story_note": data.get("story_note", ""),
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "pages": [{
+            "page_no": p.get("page_no", 0),
+            "page_title": p.get("page_title", {}),
+            "narration": p.get("narration", {}),
+            "image": _image_ref(book_dir, p.get("image_file"), inline),
+        } for p in data.get("pages", [])],
+    }
+    html = template.read_text(encoding="utf-8")
+    title_zh = (data.get("title", {}) or {}).get("zh", "") or "storybook"
+    # </script> guard: keep the embedded JSON from terminating its own tag.
+    book_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    html = html.replace("__TITLE__", title_zh).replace("__BOOK_JSON__", book_json)
+    slug = Path(book_dir).resolve().name
+    out_path = Path(book_dir) / ("%s.html" % slug)
+    tmp = out_path.with_suffix(".html.tmp")
+    tmp.write_text(html, encoding="utf-8")
+    tmp.replace(out_path)
+    return out_path
+
+
+def cmd_export(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "awaiting_outline_confirm", "illustrating", "delivered")
+    inline = not args.link_images
+    out_path = _do_export(args.dir, data, inline)
+    _emit({
+        "ok": True, "html": str(out_path.resolve()),
+        "size_bytes": out_path.stat().st_size, "inline_images": inline,
+        "next_action": "Tell the user the absolute HTML path — double-click "
+                       "to open; browser Print = PDF. Re-run export after any "
+                       "later amendment.",
+    })
+
+
 def cmd_status(args):
     book_dir = Path(args.dir)
     if not _book_path(book_dir).is_file():
@@ -674,6 +744,12 @@ def build_parser():
     p.add_argument("--file", required=True, help="outline JSON path, or - for stdin")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_save_outline)
+
+    p = sub.add_parser("export", help="Render the self-contained HTML book.")
+    p.add_argument("--link-images", action="store_true",
+                   help="reference images/ by relative path instead of inlining base64")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_export)
 
     p = sub.add_parser("status", help="Phase, progress, and next action.")
     p.add_argument("--dir", default=".")

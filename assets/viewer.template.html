@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+  :root {
+    --paper: #FAF0DC; --paper-deep: #F3E4C6; --paper-card: #FFFDF4;
+    --paper-halo: #FFF8E8; --ink: #59351A; --ink-soft: #7A5230;
+    --ink-faint: #AB8E6B; --coral: #EA9077; --coral-deep: #C96F58;
+    --mint: #A8DAC1; --sun: #F7C544; --sun-deep: #D9A02E; --sky: #62ACEE;
+    --font-title: "Comic Sans MS", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-ui: "Avenir Next", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse 120% 60% at 50% -10%, rgba(247,197,68,.07), transparent 60%), var(--paper);
+    color: var(--ink); font-family: var(--font-ui);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-family: var(--font-title); font-size: 20px; flex: 1; min-width: 120px; }
+  .sticker {
+    border: 3px solid var(--ink); border-radius: 999px; padding: 6px 14px;
+    background: var(--paper-card); font-family: var(--font-title); font-weight: 700;
+    box-shadow: 0 0 0 3px var(--paper-halo), 0 3px 10px rgba(89,53,26,.18);
+    cursor: pointer; user-select: none; font-size: 14px; color: var(--ink);
+  }
+  .sticker:active { transform: translateY(1px) scale(.98); }
+  .sticker.on { background: var(--sun); }
+  main { flex: 1; display: flex; align-items: stretch; min-height: 0; padding: 0 8px 8px; gap: 6px; }
+  .pagebtn {
+    align-self: center; width: 52px; height: 52px; border-radius: 50%;
+    border: 3px solid var(--ink); background: var(--coral); color: #fff;
+    font-size: 22px; cursor: pointer; flex: none;
+    box-shadow: 0 0 0 3px var(--paper-halo), 0 4px 12px rgba(89,53,26,.22);
+  }
+  .pagebtn:disabled { opacity: .25; cursor: default; }
+  #stage {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    background: var(--paper-card); border: 3px solid var(--ink);
+    border-radius: 22px; overflow: hidden;
+    box-shadow: 0 6px 24px rgba(89,53,26,.18);
+  }
+  #pic {
+    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--paper-deep);
+  }
+  #pic img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  #pic .placeholder {
+    font-size: 48px; text-align: center; color: var(--ink-faint);
+    font-family: var(--font-title); padding: 40px;
+  }
+  #pic .placeholder small { display: block; font-size: 14px; margin-top: 12px; }
+  #text { padding: 14px 20px 18px; border-top: 3px dashed var(--paper-deep); }
+  #pagetitle { font-family: var(--font-title); font-size: 17px; color: var(--ink-soft); margin-bottom: 6px; }
+  #narration { font-size: 17px; line-height: 1.65; white-space: pre-wrap; }
+  #covertitle { font-family: var(--font-title); font-size: 30px; }
+  #coverauthor { color: var(--ink-soft); margin-top: 4px; }
+  footer { text-align: center; padding: 6px; color: var(--ink-faint); font-size: 13px; }
+  #printpages { display: none; }
+  @media print {
+    body > header, body > main, body > footer { display: none; }
+    body { overflow: visible; background: #fff; }
+    #printpages { display: block; }
+    .print-page { page-break-after: always; text-align: center; padding: 24px; }
+    .print-page img { max-width: 100%; max-height: 70vh; }
+    .print-page .pp-title { font-family: var(--font-title); font-size: 20px; margin: 12px 0 6px; }
+    .print-page .pp-text { font-size: 14px; line-height: 1.6; text-align: left; white-space: pre-wrap; }
+  }
+</style>
+</head>
+<body>
+<script id="book-data" type="application/json">__BOOK_JSON__</script>
+<header>
+  <h1 id="booktitle"></h1>
+  <button class="sticker" id="langbtn" title="切换语言 / language">中 / EN</button>
+  <button class="sticker" id="speakbtn" title="朗读本页">🔊 读给我听</button>
+  <button class="sticker" onclick="window.print()" title="打印或另存为 PDF">🖨️ 打印</button>
+</header>
+<main>
+  <button class="pagebtn" id="prevbtn">‹</button>
+  <div id="stage">
+    <div id="pic"></div>
+    <div id="text">
+      <div id="pagetitle"></div>
+      <div id="narration"></div>
+    </div>
+  </div>
+  <button class="pagebtn" id="nextbtn">›</button>
+</main>
+<footer id="pageno"></footer>
+<div id="printpages"></div>
+<script>
+"use strict";
+var BOOK = JSON.parse(document.getElementById("book-data").textContent);
+var state = { i: 0, lang: "zh" };
+var PLACEHOLDER = '<div class="placeholder">🎨<small>这一页的插画休息啦<br>This page\'s picture is resting</small></div>';
+
+function t(pair, lang) { return (pair && (pair[lang] || pair.zh || pair.en)) || ""; }
+
+function pageImage(p) {
+  if (!p.image || p.image === "") { return PLACEHOLDER; }
+  return '<img alt="illustration" src="' + p.image + '">';
+}
+
+function render() {
+  var p = BOOK.pages[state.i];
+  var lang = state.lang;
+  document.documentElement.lang = lang === "zh" ? "zh" : "en";
+  document.title = t(BOOK.title, lang);
+  document.getElementById("booktitle").textContent = t(BOOK.title, lang);
+  document.getElementById("pic").innerHTML = pageImage(p);
+  var isCover = p.page_no === 0;
+  var titleEl = document.getElementById("pagetitle");
+  var narEl = document.getElementById("narration");
+  if (isCover) {
+    titleEl.innerHTML = '<div id="covertitle">' + t(BOOK.title, lang) +
+      '</div><div id="coverauthor">' + (BOOK.author || "") + "</div>";
+    narEl.textContent = "";
+  } else {
+    titleEl.textContent = t(p.page_title, lang);
+    narEl.textContent = t(p.narration, lang);
+  }
+  document.getElementById("prevbtn").disabled = state.i === 0;
+  document.getElementById("nextbtn").disabled = state.i === BOOK.pages.length - 1;
+  document.getElementById("pageno").textContent =
+    (state.i + 1) + " / " + BOOK.pages.length + (isCover ? (lang === "zh" ? "(封面)" : " (cover)") : "");
+  if (window.speechSynthesis) { speechSynthesis.cancel(); }
+}
+
+function go(delta) {
+  var n = state.i + delta;
+  if (n < 0 || n >= BOOK.pages.length) { return; }
+  state.i = n; render();
+}
+
+document.getElementById("prevbtn").onclick = function () { go(-1); };
+document.getElementById("nextbtn").onclick = function () { go(1); };
+document.getElementById("langbtn").onclick = function () {
+  state.lang = state.lang === "zh" ? "en" : "zh"; render();
+};
+
+var speakBtn = document.getElementById("speakbtn");
+if (!window.speechSynthesis) {
+  speakBtn.disabled = true; speakBtn.style.opacity = ".4";
+  speakBtn.title = "此浏览器不支持语音合成";
+} else {
+  speakBtn.onclick = function () {
+    var p = BOOK.pages[state.i];
+    var text = p.page_no === 0 ? t(BOOK.title, state.lang) : t(p.narration, state.lang);
+    if (!text) { return; }
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = state.lang === "zh" ? "zh-CN" : "en-US";
+    speechSynthesis.speak(u);
+  };
+}
+
+document.addEventListener("keydown", function (e) {
+  if (e.key === "ArrowLeft") { go(-1); }
+  if (e.key === "ArrowRight") { go(1); }
+});
+var touchX = null;
+document.addEventListener("touchstart", function (e) { touchX = e.touches[0].clientX; });
+document.addEventListener("touchend", function (e) {
+  if (touchX === null) { return; }
+  var dx = e.changedTouches[0].clientX - touchX;
+  if (Math.abs(dx) > 40) { go(dx < 0 ? 1 : -1); }
+  touchX = null;
+});
+
+(function buildPrint() {
+  var holder = document.getElementById("printpages");
+  var html = "";
+  BOOK.pages.forEach(function (p) {
+    html += '<div class="print-page">' + pageImage(p) +
+      '<div class="pp-title">' + (p.page_no === 0 ? t(BOOK.title, "zh") : t(p.page_title, "zh")) + "</div>" +
+      '<div class="pp-text">' + (p.page_no === 0 ? (BOOK.author || "") :
+        (t(p.narration, "zh") + "\n\n" + t(p.narration, "en"))) + "</div></div>";
+  });
+  holder.innerHTML = html;
+})();
+
+render();
+</script>
+</body>
+</html>
