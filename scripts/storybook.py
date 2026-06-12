@@ -108,6 +108,54 @@ def _require_phase(data, *allowed):
 
 # ── commands ────────────────────────────────────────────────────────────
 
+def _default_book(idea, audience, style, author):
+    return {
+        "version": 1,
+        "phase": "outlining",
+        "idea": idea, "audience": audience, "style": style, "author": author,
+        "style_bible": "", "character_bible": "",
+        "title": {"zh": "", "en": ""},
+        "story_note": "",
+        "cover": {"image_prompt": "", "image_file": ""},
+        "pages": [],
+        "current_page_index": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+def cmd_init(args):
+    idea = (args.idea or "").strip()
+    if not idea:
+        _fail("idea is required", hint="Pass --idea '<one-line story idea>'.")
+    slug = (args.slug or "").strip()
+    if slug:
+        if not re.match(r"^[a-zA-Z0-9_-]+$", slug):
+            _fail("slug must match ^[a-zA-Z0-9_-]+$ (got %r)" % slug,
+                  hint="Use ASCII letters/digits/hyphen, e.g. --slug little-fox.")
+    else:
+        # Ported from FDA save_intake slug derivation (tools.py:422-424).
+        slug = re.sub(r"[^a-z0-9-]+", "-", idea.lower()).strip("-")[:40]
+        if not slug:
+            slug = "book"  # pure CJK / symbol ideas fall back
+    parent = Path(args.dir)
+    book_dir = parent / slug
+    if _book_path(book_dir).is_file():
+        _fail("book directory %r already exists" % str(book_dir),
+              hint="Pick another --slug, or cd into it and run `status` to resume.")
+    (book_dir / "images").mkdir(parents=True, exist_ok=True)
+    _write_book(book_dir, _default_book(
+        idea, (args.audience or "").strip(), (args.style or "").strip(),
+        (args.author or "").strip()))
+    _emit({
+        "ok": True, "slug": slug, "book_dir": str(book_dir.resolve()),
+        "phase": "outlining",
+        "next_action": "Design the story outline (5-12 pages INCLUDING the "
+                       "cover as pages[0], page_no=0). Write style_bible + "
+                       "character_bible, then run: save-outline --file "
+                       "outline.json --dir <book_dir>. See references/prompts.md.",
+    })
+
+
 def cmd_status(args):
     book_dir = Path(args.dir)
     if not _book_path(book_dir).is_file():
@@ -129,6 +177,15 @@ def build_parser():
         description="Single-book picture-book state machine (Agent Skills CLI).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("init", help="Create a new book directory.")
+    p.add_argument("--idea", required=True)
+    p.add_argument("--slug", default="")
+    p.add_argument("--audience", default="")
+    p.add_argument("--style", default="")
+    p.add_argument("--author", default="")
+    p.add_argument("--dir", default=".", help="PARENT directory (init only).")
+    p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("status", help="Phase, progress, and next action.")
     p.add_argument("--dir", default=".")
