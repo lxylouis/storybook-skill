@@ -183,3 +183,24 @@ class TestConfirmOutline(unittest.TestCase):
             d = helpers.make_book(td, phase="outlining")
             code, _, _ = helpers.run_cli("confirm-outline", "--dir", d)
             self.assertEqual(code, 2)
+
+
+class TestAmendGuards(unittest.TestCase):
+    def test_skip_blocked_in_delivered(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, _, _ = helpers.run_cli("skip", "--page", "page-1", "--dir", d)
+            self.assertEqual(code, 2)
+
+    def test_amend_outline_blocked_in_illustrating(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            code, _, _ = helpers.run_cli("amend-outline", "--dir", d)
+            self.assertEqual(code, 2)
+
+    def test_amend_page_bad_json_rejected(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, _, _ = helpers.run_cli("amend-page", "--page", "page-1",
+                                         "--json", "not json", "--dir", d)
+            self.assertEqual(code, 2)

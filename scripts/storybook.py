@@ -477,6 +477,123 @@ def cmd_next(args):
     _emit(brief)
 
 
+def cmd_amend_outline(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "awaiting_outline_confirm")
+    data["phase"] = "outlining"
+    _write_book(args.dir, data)
+    _emit({
+        "ok": True, "phase": "outlining",
+        "next_action": "Regenerate the FULL outline with the user's "
+                       "corrections applied, then run save-outline again. "
+                       "To KEEP existing images, carry each page's current "
+                       "image_file value into the new outline JSON (get them "
+                       "via status); pages whose image_prompt you changed "
+                       "should omit image_file so they get re-illustrated. "
+                       "If style changed, regenerate the cover too.",
+    })
+
+
+_AMEND_KEYS = ("narration", "page_title", "image_prompt")
+
+
+def cmd_amend_page(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "illustrating", "delivered")
+    pid = (args.page or "").strip()
+    page = _find_page(data, pid)
+    try:
+        patch = json.loads(args.json)
+    except Exception as exc:
+        _fail("--json is not valid JSON: %s" % exc,
+              hint='Example: --json \'{"narration": {"zh": "...", "en": "..."}, '
+                   '"image_prompt": "..."}\'')
+    if not isinstance(patch, dict) or not patch:
+        _fail("--json must be a non-empty object")
+    unknown = [k for k in patch if k not in _AMEND_KEYS]
+    if unknown:
+        _fail("unknown fields: %s" % unknown,
+              hint="Allowed: narration, page_title, image_prompt.")
+    prompt_changed = False
+    if "narration" in patch:
+        nar = patch["narration"]
+        if not isinstance(nar, dict):
+            _fail("narration must be a dict with zh/en keys")
+        merged = dict(page.get("narration", {}))
+        merged.update({k: (v or "").strip() for k, v in nar.items() if k in ("zh", "en")})
+        if not merged.get("zh") or not merged.get("en"):
+            _fail("narration.zh and narration.en must both stay non-empty")
+        page["narration"] = merged
+    if "page_title" in patch:
+        pt = patch["page_title"]
+        if not isinstance(pt, dict):
+            _fail("page_title must be a dict with zh/en keys")
+        merged = dict(page.get("page_title", {}))
+        merged.update({k: (v or "").strip() for k, v in pt.items() if k in ("zh", "en")})
+        zh = merged.get("zh", "")
+        if page.get("page_no", 0) != 0 and (len(zh) < 2 or len(zh) > 15):
+            _fail("page_title.zh must be 2-15 chars (got %d)" % len(zh))
+        page["page_title"] = merged
+    if "image_prompt" in patch:
+        ipr = (patch["image_prompt"] or "").strip()
+        if not ipr:
+            _fail("image_prompt cannot be emptied")
+        if len(ipr) > 200:
+            _fail("image_prompt too long (%d chars, max 200)" % len(ipr))
+        if ipr != page.get("image_prompt"):
+            page["image_prompt"] = ipr
+            prompt_changed = True
+            if pid == "cover":
+                data.setdefault("cover", {})["image_prompt"] = ipr
+    _write_book(args.dir, data)
+    if prompt_changed:
+        nxt = ("image_prompt changed → the old picture no longer matches. Run "
+               "`regenerate --page %s`, re-illustrate (compose-prompt → "
+               "generate → save-image), then `export`." % pid)
+    else:
+        nxt = "Text-only change — keep the existing image. Re-run `export` to refresh the HTML."
+    _emit({"ok": True, "page_id": pid, "next_action": nxt})
+
+
+def cmd_regenerate(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "illustrating", "delivered")
+    pid = (args.page or "").strip()
+    page = _find_page(data, pid)
+    page["image_file"] = ""
+    page["failed_attempts"] = int(page.get("failed_attempts", 0)) + 1
+    if data["pages"] and data["pages"][0].get("id") == pid:
+        data.setdefault("cover", {})["image_file"] = ""
+    _write_book(args.dir, data)
+    attempts = page["failed_attempts"]
+    hint = ("Image cleared (attempt #%d). Re-illustrate: compose-prompt --page "
+            "%s → generate → save-image." % (attempts, pid))
+    if attempts >= 3:
+        hint += (" 3+ attempts failed — suggest `skip --page %s --reason ...` "
+                 "to the user instead of retrying forever." % pid)
+    _emit({"ok": True, "page_id": pid, "failed_attempts": attempts,
+           "next_action": hint})
+
+
+def cmd_skip(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "illustrating")
+    pid = (args.page or "").strip()
+    page = _find_page(data, pid)
+    page["image_file"] = SKIP_SENTINEL
+    if (args.reason or "").strip():
+        page["skip_reason"] = args.reason.strip()
+    remaining = sum(1 for p in data["pages"] if not (p.get("image_file") or "").strip())
+    _write_book(args.dir, data)
+    if remaining > 0:
+        nxt = ("Page skipped with a placeholder (narration preserved). %d "
+               "pages still need images — continue via `next`." % remaining)
+    else:
+        nxt = "Page skipped. All pages now have images or placeholders — run `finalize`."
+    _emit({"ok": True, "page_id": pid, "skipped": True, "remaining": remaining,
+           "next_action": nxt})
+
+
 def cmd_status(args):
     book_dir = Path(args.dir)
     if not _book_path(book_dir).is_file():
@@ -526,6 +643,28 @@ def build_parser():
                        help="User confirmed outline+cover → illustrating.")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_confirm_outline)
+
+    p = sub.add_parser("amend-outline", help="Back to outlining for a rewrite.")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_amend_outline)
+
+    p = sub.add_parser("amend-page", help="Patch one page's text fields.")
+    p.add_argument("--page", required=True)
+    p.add_argument("--json", required=True,
+                   help='partial JSON: {"narration": {...}, "page_title": {...}, "image_prompt": "..."}')
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_amend_page)
+
+    p = sub.add_parser("regenerate", help="Clear a page image for re-illustration.")
+    p.add_argument("--page", required=True)
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_regenerate)
+
+    p = sub.add_parser("skip", help="Skip a repeatedly-failing page.")
+    p.add_argument("--page", required=True)
+    p.add_argument("--reason", default="")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_skip)
 
     p = sub.add_parser("next", help="Advance illustration cursor.")
     p.add_argument("--dir", default=".")

@@ -169,5 +169,66 @@ class TestConfirmAndNext(unittest.TestCase):
             self.assertIn("finalize", out["next_action"])
 
 
+class TestAmendRegenerateSkip(unittest.TestCase):
+    def test_amend_outline_returns_to_outlining(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="awaiting_outline_confirm")
+            code, out, _ = helpers.run_cli("amend-outline", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(helpers.read_book(d)["phase"], "outlining")
+            self.assertIn("save-outline", out["next_action"])
+            self.assertIn("image_file", out["next_action"])  # 提醒回填保图
+
+    def test_amend_page_partial_override(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli(
+                "amend-page", "--page", "page-2", "--json",
+                '{"narration": {"zh": "哗啦——新的一页。", "en": "Splash — new page."}}',
+                "--dir", d)
+            self.assertEqual(code, 0)
+            data = helpers.read_book(d)
+            self.assertEqual(data["pages"][2]["narration"]["zh"], "哗啦——新的一页。")
+            self.assertEqual(data["pages"][2]["image_file"], "images/page-02.png")
+            self.assertNotIn("regenerate", out["next_action"])  # 只改文不触发重出图
+
+    def test_amend_page_image_prompt_hints_regenerate(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli(
+                "amend-page", "--page", "page-2", "--json",
+                '{"image_prompt": "fox jumps over a creek at dawn"}', "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertIn("regenerate", out["next_action"])  # 改图才改图
+
+    def test_amend_page_validates_fields(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli(
+                "amend-page", "--page", "page-2", "--json",
+                '{"image_prompt": "%s"}' % ("x" * 201), "--dir", d)
+            self.assertEqual(code, 2)
+
+    def test_regenerate_clears_image_and_counts(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            code, out, _ = helpers.run_cli("regenerate", "--page", "cover", "--dir", d)
+            self.assertEqual(code, 0)
+            data = helpers.read_book(d)
+            self.assertEqual(data["pages"][0]["image_file"], "")
+            self.assertEqual(data["cover"]["image_file"], "")  # cover 同步
+            self.assertEqual(data["pages"][0]["failed_attempts"], 1)
+
+    def test_skip_sets_sentinel(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            code, out, _ = helpers.run_cli("skip", "--page", "page-3",
+                                           "--reason", "content policy", "--dir", d)
+            self.assertEqual(code, 0)
+            data = helpers.read_book(d)
+            self.assertEqual(data["pages"][3]["image_file"], "skipped")
+            self.assertEqual(data["pages"][3]["skip_reason"], "content policy")
+
+
 if __name__ == "__main__":
     unittest.main()
