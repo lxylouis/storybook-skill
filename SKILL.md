@@ -42,7 +42,7 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
 | `regenerate --page <id>` | 清图待重出(自动记失败次数) |
 | `skip --page <id> [--reason ...]` | 跳过反复失败的页 |
 | `finalize` | 校验全书 → delivered → 自动导出 HTML |
-| `export [--link-images]` | (重新)导出 HTML |
+| `export [--link-images]` | (重新)导出 HTML。大图(2K 以上)建议加 `--link-images` 避免单文件几十 MB |
 | `doctor` | 环境自检(python/出图配置/模板) |
 
 ## 流程总图
@@ -81,6 +81,7 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
 - 出图失败:`regenerate --page <id>` 记一次失败并清图,然后重试;**同一页失败
   3 次**(看返回的 failed_attempts)就建议用户 `skip`,别无限重试。
 - `finalize` 之后把 HTML **绝对路径**给用户:双击打开;浏览器打印 = PDF。
+  若文件过大(2K 图较多时可能几十 MB),建议 `export --link-images` 用外部引用替代内嵌。
 - 返修:只改文字 → `amend-page` 后直接 `export`(图复用);改了 image_prompt →
   `amend-page` → `regenerate` → 重出图 → `save-image` → `export`;只是图不满意
   → `regenerate` → 重出 → `save-image` → `export`。
