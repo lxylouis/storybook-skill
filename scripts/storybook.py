@@ -97,8 +97,15 @@ def _require_phase(data, *allowed):
     current = data.get("phase", "")
     if current not in allowed:
         nxt = ", ".join(PHASE_NEXT_COMMANDS.get(current, [])) or "(none)"
+        # Include the valid commands in each required phase so the error
+        # message names the blocked command (e.g. "save-outline").
+        allowed_cmds = []
+        for a in allowed:
+            allowed_cmds.extend(PHASE_NEXT_COMMANDS.get(a, []))
+        allowed_cmds_str = ", ".join(allowed_cmds) if allowed_cmds else "(none)"
         _fail(
-            "phase=%r, requires %s" % (current, ", ".join(allowed)),
+            "phase=%r, requires %s (available: %s)"
+            % (current, ", ".join(allowed), allowed_cmds_str),
             hint="current phase = '%s'; this command requires phase in: %s. "
                  "Commands that move forward from '%s': %s." % (
                      current, ", ".join(allowed), current, nxt),
@@ -156,6 +163,140 @@ def cmd_init(args):
     })
 
 
+# ── outline validation (ported from FDA save_outline, tools.py:530-610) ──
+
+def _validate_outline_input(payload):
+    """Validate save-outline input; return normalized (meta, pages).
+
+    pages[0] is the cover (page_no=0; page_title exempt); body pages are
+    page_no 1..N. ids are CLI-assigned: 'cover', 'page-1', ... Carried
+    'image_file' values are preserved (amend-and-resave keeps images).
+    """
+    if not isinstance(payload, dict):
+        _fail("outline file must contain a JSON object")
+    title = payload.get("title") or {}
+    if not isinstance(title, dict) or not (title.get("zh") or "").strip():
+        _fail("title.zh is required")
+    if not (title.get("en") or "").strip():
+        _fail("title.en is required")
+    author = (payload.get("author") or "").strip()
+    if not author:
+        _fail("author is required")
+    sb = (payload.get("style_bible") or "").strip()
+    if not sb:
+        _fail("style_bible is required",
+              hint="Global art-style anchor. See references/prompts.md.")
+    cb = (payload.get("character_bible") or "").strip()
+    if not cb:
+        _fail("character_bible is required",
+              hint="One line per character, starting with 'Name:'. "
+                   "See references/prompts.md.")
+    pages = payload.get("pages")
+    if not isinstance(pages, list) or not pages:
+        _fail("pages must be a non-empty list")
+    if len(pages) < 5:
+        _fail("at least 5 pages required, got %d" % len(pages),
+              hint="A picture book needs at least 5 pages (cover + 4 body).")
+    if len(pages) > 12:
+        _fail("at most 12 pages allowed, got %d" % len(pages),
+              hint="Keep the story concise; 5-12 pages is the sweet spot.")
+
+    norm = []
+    for i, p in enumerate(pages):
+        if not isinstance(p, dict):
+            _fail("pages[%d] must be an object" % i)
+        pno = p.get("page_no", i)
+        if pno != i:
+            _fail("pages[%d].page_no must be %d (cover=0, body contiguous), got %r"
+                  % (i, i, pno))
+        if i != 0:
+            pt = p.get("page_title")
+            if not isinstance(pt, dict):
+                _fail("pages[%d].page_title must be a dict with zh/en keys" % i)
+            zh = (pt.get("zh") or "").strip()
+            en = (pt.get("en") or "").strip()
+            if not zh:
+                _fail("pages[%d].page_title.zh is required" % i)
+            if not en:
+                _fail("pages[%d].page_title.en is required" % i)
+            if len(zh) < 2 or len(zh) > 15:
+                _fail("pages[%d].page_title.zh must be 2-15 chars (got %d)"
+                      % (i, len(zh)))
+            title_pair = {"zh": zh, "en": en}
+        else:
+            pt = p.get("page_title") or {}
+            title_pair = {"zh": (pt.get("zh") or "").strip(),
+                          "en": (pt.get("en") or "").strip()}
+        nar = p.get("narration")
+        if not isinstance(nar, dict):
+            _fail("pages[%d].narration must be a dict with zh/en keys" % i)
+        if not (nar.get("zh") or "").strip():
+            _fail("pages[%d].narration.zh is required" % i)
+        if not (nar.get("en") or "").strip():
+            _fail("pages[%d].narration.en is required" % i)
+        ipr = (p.get("image_prompt") or "").strip()
+        if not ipr:
+            _fail("pages[%d].image_prompt is required" % i)
+        if len(ipr) > 200:
+            _fail("pages[%d].image_prompt too long (%d chars, max 200)"
+                  % (i, len(ipr)),
+                  hint="只写本页场景/动作/构图，删掉画风词与角色长相——它们由 "
+                       "style_bible/character_bible 自动前置。")
+        norm.append({
+            "id": "cover" if i == 0 else "page-%d" % i,
+            "page_no": i,
+            "page_title": title_pair,
+            "narration": {"zh": nar.get("zh", "").strip(),
+                          "en": nar.get("en", "").strip()},
+            "image_prompt": ipr,
+            "image_file": (p.get("image_file") or "").strip(),
+            "failed_attempts": int(p.get("failed_attempts", 0) or 0),
+        })
+    meta = {
+        "title": {"zh": title.get("zh", "").strip(), "en": title.get("en", "").strip()},
+        "author": author,
+        "story_note": (payload.get("story_note") or "").strip(),
+        "style_bible": sb,
+        "character_bible": cb,
+    }
+    return meta, norm
+
+
+def cmd_save_outline(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "outlining")
+    if args.file == "-":
+        raw = sys.stdin.read()
+    else:
+        f = Path(args.file)
+        if not f.is_file():
+            _fail("outline file %r not found" % str(f))
+        raw = f.read_text(encoding="utf-8")
+    try:
+        payload = json.loads(raw)
+    except Exception as exc:
+        _fail("outline file is not valid JSON: %s" % exc)
+    meta, pages = _validate_outline_input(payload)
+    data.update(meta)
+    data["pages"] = pages
+    data["cover"] = {"image_prompt": pages[0]["image_prompt"],
+                     "image_file": pages[0]["image_file"]}
+    data["current_page_index"] = 0
+    data["phase"] = "awaiting_outline_confirm"
+    _write_book(args.dir, data)
+    _emit({
+        "ok": True, "page_count": len(pages),
+        "title_zh": meta["title"]["zh"], "title_en": meta["title"]["en"],
+        "phase": "awaiting_outline_confirm",
+        "next_action": "STOP-AND-CONFIRM flow: 1) generate the COVER image "
+                       "now (compose-prompt --page cover → your image tool or "
+                       "scripts/gen_image.py → save-image --page cover), "
+                       "2) show the user the outline + cover, 3) WAIT for "
+                       "explicit user confirmation, then run confirm-outline. "
+                       "NEVER confirm in the same breath.",
+    })
+
+
 def cmd_status(args):
     book_dir = Path(args.dir)
     if not _book_path(book_dir).is_file():
@@ -186,6 +327,11 @@ def build_parser():
     p.add_argument("--author", default="")
     p.add_argument("--dir", default=".", help="PARENT directory (init only).")
     p.set_defaults(func=cmd_init)
+
+    p = sub.add_parser("save-outline", help="Persist the validated outline.")
+    p.add_argument("--file", required=True, help="outline JSON path, or - for stdin")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_save_outline)
 
     p = sub.add_parser("status", help="Phase, progress, and next action.")
     p.add_argument("--dir", default=".")
