@@ -6,8 +6,9 @@
 <title>__TITLE__</title>
 <style>
   /* ═══════════════════════════════════════════════════════════════
-     Storybook Viewer — Design Tokens 「暖米纸 · 深棕 · 贴纸描边」
-     Fork 自 Storybook Redesign(sb-tokens.css);保持自包含/零 CDN。
+     Storybook Viewer — 按 Claude Design「Storybook Redesign」实现
+     设计基线: sb-tokens.css + sb-reader.jsx + sb-ui.jsx (handoff bundle)
+     适配约束: 单书查看器(无书库)、单文件自包含、离线零 CDN。
      ═══════════════════════════════════════════════════════════════ */
   :root {
     /* 纸张 */
@@ -15,13 +16,11 @@
     --paper-deep:  #F3E4C6;
     --paper-card:  #FFFDF4;
     --paper-halo:  #FFF8E8;
-
     /* 文字 */
     --ink:        #59351A;
     --ink-soft:   #7A5230;
     --ink-faint:  #AB8E6B;
-    --line:       #DCBF96;
-
+    --line:       #DCBF96;   /* 涂鸦线稿色 */
     /* 糖果色 */
     --coral:      #EA9077;  --coral-deep: #C96F58;
     --mint:       #A8DAC1;  --mint-deep:  #7FBFA0;
@@ -29,23 +28,20 @@
     --honey:      #F09B22;  --honey-deep: #C9780D;
     --sky:        #62ACEE;  --sky-deep:   #3C88CC;
     --lilac:      #C8B6E2;  --lilac-deep: #A78FC9;
-
     /* 木质 */
     --wood:       #8C5A33;
     --wood-dark:  #6E4222;
     --wood-light: #A9744A;
     --wood-deep:  #59331A;
-
-    /* 字体 — 设计稿字栈 + 系统兜底,离线可渲染 */
+    /* 字体 — 设计稿字栈 + 系统兜底(离线:装了就用,没装走兜底) */
     --font-title: 'Baloo 2', 'ZCOOL KuaiLe', 'Comic Sans MS', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
     --font-ui:    'Fredoka', 'Avenir Next', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-    --font-story: 'Nunito', 'PingFang SC', system-ui, sans-serif;
-
+    --font-story: 'Nunito', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
     --r-card: 26px;
     --r-book: 22px;
   }
   * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; }
+  html, body { height: 100%; width: 100%; }
   body {
     background:
       radial-gradient(ellipse 120% 60% at 50% -10%, rgba(247,197,68,.07), transparent 60%),
@@ -55,7 +51,7 @@
     display: flex; flex-direction: column; overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
-  /* 纸张质感 — SVG noise 覆层(移植 sb-paper::after) */
+  /* 纸张噪点质感(sb-paper::after) */
   body::after {
     content: '';
     position: fixed; inset: 0; pointer-events: none; z-index: 0;
@@ -63,155 +59,179 @@
   }
   ::selection { background: rgba(247, 197, 68, .4); }
 
+  /* ── 涂鸦背景层(sb-doodles,密度=重) ─────────────────── */
+  #doodles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+  #doodles .doodle { position: absolute; color: var(--line); font-family: var(--font-ui); line-height: 1; }
+  #doodles .cloud { position: absolute; display: flex; opacity: .45; }
+  #doodles .cloud i {
+    display: block; border-radius: 50%;
+    border: 2px solid var(--line); background: var(--paper);
+  }
+  #doodles .rbow { position: absolute; opacity: .4; }
+  #doodles .rbow i { display: block; }
+
   /* ── 顶栏 ─────────────────────────────────────────────── */
   header {
-    position: relative; z-index: 2;
+    position: relative; z-index: 3;
     display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px; flex-wrap: wrap;
+    padding: 12px 16px 10px;
     background: var(--paper);
-    box-shadow: 0 2px 10px rgba(89,53,26,.1);
+    box-shadow: 0 3px 12px rgba(89,53,26,.14);
   }
-  header h1 {
-    font-family: var(--font-title); font-size: 20px; font-weight: 800;
-    flex: 1; min-width: 120px; color: var(--ink);
+  h1#booktitle {
+    flex: 1; min-width: 0; font-size: 24px; line-height: 1.15;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .rl { /* sb-rainbow-letter */
+    display: inline-block;
+    font-family: var(--font-title); font-weight: 800;
+    text-shadow:
+      -1.5px -1.5px 0 var(--paper-halo), 1.5px -1.5px 0 var(--paper-halo),
+      -1.5px 1.5px 0 var(--paper-halo), 1.5px 1.5px 0 var(--paper-halo),
+      0 4px 6px rgba(89, 53, 26, .2);
+  }
 
-  /* ── 贴纸描边胶囊(sticker) — 移植 sb-sticker ──────────── */
+  /* ── 贴纸描边胶囊(sb-sticker) ─────────────────────────── */
   .sticker {
-    position: relative; z-index: 2;
     display: inline-flex; align-items: center; gap: 6px;
     border-radius: 999px; white-space: nowrap;
-    padding: 6px 14px; font-size: 14px;
     font-family: var(--font-title); font-weight: 700;
-    background: var(--paper-card); color: var(--ink);
-    border: 3px solid var(--ink);
-    box-shadow: 0 0 0 3px var(--paper-halo), 0 3px 10px rgba(89,53,26,.18);
+    border: 3px solid;
+    box-shadow: 0 0 0 3px var(--paper-halo), 0 3px 10px rgba(89, 53, 26, .18);
     cursor: pointer; user-select: none;
     transition: transform .15s ease, box-shadow .15s ease;
   }
-  .sticker:hover { transform: translateY(-1px) scale(1.02); }
+  .sticker:hover  { transform: translateY(-1px) scale(1.02); }
   .sticker:active { transform: translateY(1px) scale(.98); }
-  .sticker.on { background: var(--sun); }
-
-  /* ── 糖果圆形翻页钮 — 移植 sb-pagebtn ────────────────── */
-  .pagebtn {
-    position: relative; z-index: 2;
-    align-self: center; flex: none;
-    display: flex; align-items: center; justify-content: center;
-    width: 52px; height: 52px; border-radius: 50%;
-    background: var(--coral); color: #fff;
-    font-size: 24px; font-weight: 700;
-    cursor: pointer; user-select: none;
-    border: 3px solid var(--ink);
-    box-shadow: 0 0 0 3px var(--paper-halo), 0 4px 12px rgba(89,53,26,.22);
-    transition: transform .15s ease, opacity .2s ease;
-  }
-  .pagebtn:hover { transform: scale(1.08); }
-  .pagebtn:active { transform: scale(.94); }
-  .pagebtn:disabled { opacity: 0; pointer-events: none; }
+  .st-paper { background: var(--paper-card); border-color: rgba(89,53,26,.35); color: var(--ink-soft); padding: 6px 14px; font-size: 14px; }
+  /* 读给我听:饱和橙金(设计迭代#3 指定 honey) */
+  .st-honey { background: var(--honey); border-color: var(--honey-deep); color: #FFF8E8; padding: 9px 20px; font-size: 16px; }
+  /* CN/EN 切换(sb-ui LangToggle) */
+  #langbtn { background: var(--paper-card); border-color: var(--coral-deep); padding: 4px 6px; gap: 4px; font-size: 15px; }
+  #langbtn .pill { padding: 3px 10px; border-radius: 999px; font-weight: 800; color: var(--ink-faint); transition: all .2s ease; }
+  #langbtn .pill.on { background: var(--honey); color: #FFF8E8; }
+  #langbtn .sep { color: var(--ink-faint); font-weight: 700; }
+  @keyframes sb-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+  body.speaking #speakicon { animation: sb-pulse .8s ease-in-out infinite; display: inline-block; }
 
   /* ── 主区域 ───────────────────────────────────────────── */
-  main {
-    position: relative; z-index: 1;
-    flex: 1; display: flex; align-items: stretch;
-    min-height: 0; padding: 0 8px 8px; gap: 6px;
-  }
+  main { position: relative; z-index: 1; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-  /* ── 舞台卡片 ─────────────────────────────────────────── */
-  #stage {
-    flex: 1; display: flex; flex-direction: column; min-width: 0;
-    background: var(--paper-card);
-    border: 3px solid rgba(89,53,26,.25);
-    border-radius: var(--r-card);
-    overflow: hidden;
-    box-shadow: 0 0 0 3px rgba(255,248,232,.8), 0 8px 28px rgba(89,53,26,.18);
-  }
-
-  /* ── 插画区 + 艺术辉光(art-glow) ─────────────────────── */
-  #pic {
-    flex: 1; min-height: 0;
+  /* 糖果圆形翻页钮(sb-pagebtn;next=sun, prev=mint) */
+  .pagebtn {
+    position: absolute; z-index: 4;
     display: flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; border-radius: 50%;
+    cursor: pointer; user-select: none;
+    border: 3px solid;
+    box-shadow: 0 0 0 3px var(--paper-halo), 0 4px 12px rgba(89, 53, 26, .22);
+    transition: transform .15s ease, opacity .2s ease;
+    top: 28%; transform: translateY(-50%);
+  }
+  .pagebtn:hover  { transform: translateY(-50%) scale(1.08); }
+  .pagebtn:active { transform: translateY(-50%) scale(.94); }
+  .pagebtn:disabled { opacity: 0; pointer-events: none; }
+  #prevbtn { left: 10px;  background: var(--mint); border-color: var(--mint-deep); }
+  #nextbtn { right: 10px; background: var(--sun);  border-color: var(--sun-deep); }
+  .pagebtn svg { width: 42%; height: 42%; }
+  #prevbtn svg { transform: rotate(180deg); }
+
+  /* ── 书本容器:移动端 = 上图下文;桌面端 = 摊开书 ─────── */
+  #book { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* 插画区(移动端:画框 flex 52%) */
+  #artpane { position: relative; flex: 1 1 52%; min-height: 0; padding: 4px 14px 0; }
+  #artframe {
+    position: relative; width: 100%; height: 100%;
+    border-radius: 24px; overflow: hidden;
+    border: 3px solid rgba(89,53,26,.25);
+    box-shadow: 0 0 0 3px rgba(255,248,232,.8), 0 10px 26px rgba(89,53,26,.22);
     background: var(--paper-deep);
-    /* 金色辉光内框 — 移植 sb-art-glow */
-    box-shadow: inset 0 0 0 4px #F2DFA8, inset 0 0 24px 6px rgba(247,197,68,.5);
   }
-  #pic img {
-    max-width: 100%; max-height: 100%; object-fit: contain;
-  }
+  #pic { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  #pic img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; }
   #pic .placeholder {
     font-size: 48px; text-align: center; color: var(--ink-faint);
     font-family: var(--font-title); padding: 40px;
   }
-  #pic .placeholder small {
-    display: block; font-size: 14px; margin-top: 12px; color: var(--ink-faint);
+  #pic .placeholder small { display: block; font-size: 14px; margin-top: 12px; }
+  /* 页码徽章(移动端在画框内右下) */
+  #pagebadge {
+    position: absolute; right: 26px; bottom: 10px; z-index: 3; white-space: nowrap;
+    background: rgba(255,253,244,.85); border-radius: 999px; padding: 2px 10px;
+    font-size: 12px; color: var(--ink-soft); font-weight: 600;
   }
 
-  /* ── 文字区 ───────────────────────────────────────────── */
-  #text {
-    padding: 16px 20px 18px;
-    border-top: 3px dashed var(--paper-deep);
-  }
-  #pagetitle {
-    font-family: var(--font-title); font-size: 17px;
-    color: var(--ink-soft); margin-bottom: 6px; font-weight: 700;
-  }
-  #narration {
-    font-family: var(--font-story); font-size: 17px;
-    line-height: 1.75; white-space: pre-wrap; font-weight: 700;
-    color: var(--ink); text-wrap: pretty;
-  }
+  /* 书缝(仅桌面) */
+  #gutter { display: none; }
 
-  /* ── 封面页特殊样式 ───────────────────────────────────── */
-  #covertitle {
-    font-family: var(--font-title); font-weight: 800;
-    font-size: 30px; line-height: 1.25; color: var(--ink);
-    /* 彩虹 halo 字影(轻量版,不使用逐字染色以保持简洁) */
-    text-shadow:
-      -1.5px -1.5px 0 var(--paper-halo), 1.5px -1.5px 0 var(--paper-halo),
-      -1.5px 1.5px 0 var(--paper-halo), 1.5px 1.5px 0 var(--paper-halo),
-      0 4px 6px rgba(89,53,26,.2);
+  /* 文字卡(移动端:flex 40% 圆角浮卡) */
+  #textpane {
+    flex: 1 1 40%; min-height: 0; margin: 16px 14px 14px;
+    background: var(--paper-card); border-radius: 28px;
+    box-shadow: 0 -4px 24px rgba(89,53,26,.12), 0 6px 18px rgba(89,53,26,.1);
+    padding: 22px 24px 18px;
+    display: flex; flex-direction: column; gap: 14px; justify-content: space-between;
+    overflow-y: auto;
   }
-  #coverauthor {
-    color: var(--ink-soft); margin-top: 6px;
-    font-family: var(--font-story); font-size: 16px;
-  }
+  #textpane::-webkit-scrollbar { width: 8px; }
+  #textpane::-webkit-scrollbar-track { background: transparent; }
+  #textpane::-webkit-scrollbar-thumb { background: rgba(140, 90, 51, .25); border-radius: 999px; }
+  #pagetext { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+  #pagetitle { font-family: var(--font-title); font-weight: 700; color: var(--ink-soft); margin-bottom: 8px; }
+  #narration { font-family: var(--font-story); font-weight: 700; line-height: 1.75; color: var(--ink); white-space: pre-wrap; text-wrap: pretty; }
+  /* 封面页(无 📖 图标:书名 + 作者 + 风格) */
+  #pagetext.cover { text-align: center; align-items: center; }
+  #covertitle  { font-family: var(--font-title); font-weight: 800; color: var(--ink); line-height: 1.25; }
+  #coverauthor { margin-top: 10px; font-family: var(--font-story); color: var(--ink-soft); }
+  #coverstyle  { margin-top: 4px; color: var(--ink-faint); }
 
-  /* ── 页码指示器 ───────────────────────────────────────── */
-  footer {
-    position: relative; z-index: 2;
-    text-align: center; padding: 4px;
-    color: var(--ink-faint); font-size: 13px; font-weight: 600;
-  }
+  #bottomrow { display: flex; flex-direction: column; gap: 10px; }
+  #speakrow { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  #pageno { display: none; text-align: right; font-size: 13px; color: var(--ink-faint); font-weight: 600; }
 
-  /* ── 打印区(隐藏,仅 @media print 时展示) ─────────────── */
-  #printpages { display: none; }
-  @media print {
-    body > header, body > main, body > footer { display: none; }
-    body { overflow: visible; background: #fff; }
-    body::after { display: none; }
-    #printpages { display: block; }
-    .print-page { page-break-after: always; text-align: center; padding: 24px; }
-    .print-page img { max-width: 100%; max-height: 70vh; }
-    .print-page .pp-title {
-      font-family: var(--font-title); font-size: 20px; margin: 12px 0 6px;
-    }
-    .print-page .pp-text {
-      font-size: 14px; line-height: 1.6; text-align: left; white-space: pre-wrap;
-    }
+  /* ── 仿真翻页纸(sb-flipsheet) ────────────────────────── */
+  #book.flipstage { perspective: 1800px; }
+  .flipsheet {
+    position: absolute; z-index: 30; pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(89,53,26,.16), rgba(89,53,26,0) 14%),
+      linear-gradient(90deg, #F7ECD4 0%, #FDF6E4 55%, #EFE0C0 100%);
+    border-radius: 0 14px 14px 0;
+    box-shadow: 6px 0 18px rgba(89, 53, 26, .25);
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+    transform-origin: left center;
   }
+  @keyframes sb-flip-next {
+    0%   { transform: rotateY(0deg); opacity: 1; }
+    78%  { transform: rotateY(-176deg); opacity: 1; }
+    100% { transform: rotateY(-180deg); opacity: 0; }
+  }
+  @keyframes sb-flip-prev {
+    0%   { transform: rotateY(-180deg); opacity: 0; }
+    18%  { transform: rotateY(-168deg); opacity: 1; }
+    88%  { transform: rotateY(-4deg); opacity: 1; }
+    100% { transform: rotateY(0deg); opacity: 0; }
+  }
+  .flip-next { animation: sb-flip-next .62s cubic-bezier(.4, .1, .3, 1) forwards; }
+  .flip-prev { animation: sb-flip-prev .62s cubic-bezier(.4, .1, .3, 1) forwards; }
+  /* 移动端整页掀起(更轻量) */
+  @keyframes sb-flip-next-m {
+    0%   { transform: rotateY(0deg); opacity: .98; }
+    70%  { transform: rotateY(-118deg); opacity: .95; }
+    100% { transform: rotateY(-150deg); opacity: 0; }
+  }
+  @keyframes sb-flip-prev-m {
+    0%   { transform: rotateY(-150deg); opacity: 0; }
+    30%  { transform: rotateY(-110deg); opacity: .95; }
+    90%  { transform: rotateY(-5deg); opacity: .95; }
+    100% { transform: rotateY(0deg); opacity: 0; }
+  }
+  .flip-next-m { animation: sb-flip-next-m .55s cubic-bezier(.4, .1, .3, 1) forwards; }
+  .flip-prev-m { animation: sb-flip-prev-m .55s cubic-bezier(.4, .1, .3, 1) forwards; }
 
-  /* ── 朗读脉冲动画 — 移植 sb-pulse ────────────────────── */
-  @keyframes sb-pulse {
-    0%, 100% { transform: scale(1); }
-    50%      { transform: scale(1.15); }
-  }
-  .speaking .sticker-onair {
-    animation: sb-pulse .8s ease-in-out infinite;
-    display: inline-block;
-  }
-
-  /* ── 翻页淡入动画 — 移植 sb-page-anim ───────────────── */
+  /* 翻页内容淡入(sb-page-anim) */
   @keyframes sb-page-in {
     from { opacity: 0; transform: translateX(14px) scale(.99); }
     to   { opacity: 1; transform: translateX(0) scale(1); }
@@ -220,214 +240,359 @@
     from { opacity: 0; transform: translateX(-14px) scale(.99); }
     to   { opacity: 1; transform: translateX(0) scale(1); }
   }
-  #pic.anim-next  img, #pic.anim-next  .placeholder { animation: sb-page-in .32s cubic-bezier(.22,1,.36,1); }
-  #pic.anim-prev  img, #pic.anim-prev  .placeholder { animation: sb-page-in-rev .32s cubic-bezier(.22,1,.36,1); }
-  #text.anim-next  { animation: sb-page-in .28s cubic-bezier(.22,1,.36,1); }
-  #text.anim-prev  { animation: sb-page-in-rev .28s cubic-bezier(.22,1,.36,1); }
+  #pic.anim-next { animation: sb-page-in .32s cubic-bezier(.22,1,.36,1); }
+  #pic.anim-prev { animation: sb-page-in-rev .32s cubic-bezier(.22,1,.36,1); }
+
   @media (prefers-reduced-motion: reduce) {
-    #pic.anim-next img, #pic.anim-next .placeholder,
-    #pic.anim-prev img, #pic.anim-prev .placeholder,
-    #text.anim-next, #text.anim-prev { animation: none; }
-    .speaking .sticker-onair { animation: none; }
+    .flipsheet { display: none; }
+    #pic.anim-next, #pic.anim-prev { animation: none; }
+    body.speaking #speakicon { animation: none; }
   }
 
-  /* ── 窄屏(< 820px):垂直堆叠(原移动端布局) ──────────── */
-  /* ── 宽屏(≥ 820px):摊开书——插画左页 + 文字右页 ─────── */
-  @media (min-width: 820px) {
-    main { padding: 0 12px 12px; gap: 0; }
-    #stage {
-      flex-direction: row;
-      border-radius: 16px;
-      /* 书皮质感:渐变米纸 + 棕色书脊边框(移植 sb-openbook) */
-      background: linear-gradient(90deg, #F4E8CF 0%, #FBF3DF 46%, #E8D8B8 50%, #FBF3DF 54%, #F4E8CF 100%);
-      border: none;
-      box-shadow:
-        0 0 0 8px #8A4F26, 0 0 0 10px #6E3D1C,
-        0 24px 48px rgba(0,0,0,.45);
-    }
-    #pic {
-      flex: 1; min-width: 0;
-      border-radius: 12px 0 0 12px;
-      box-shadow: none;
-      /* 反色木纹桌布背景(摊开的书放在木桌上) */
-    }
-    /* 桌面背景 — body 在宽屏时加木桌纹理 */
-    body {
+  /* ── 桌面端(设计断点:≥900px 且横屏):木桌 + 摊开书 ──── */
+  @media (min-width: 900px) and (orientation: landscape) {
+    main {
+      /* sb-desk 木桌 */
       background:
-        radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,226,158,.14), transparent 70%),
+        radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255, 226, 158, .14), transparent 70%),
         repeating-linear-gradient(92deg, rgba(0,0,0,.05) 0 3px, transparent 3px 60px),
         linear-gradient(180deg, #7A4A26, #5E3517);
+      flex-direction: row; align-items: center; justify-content: center;
+      padding: 30px 90px 40px;
     }
-    body::after {
-      /* 宽屏保留纸张噪点但减淡,避免遮住木桌纹理 */
-      opacity: .6;
+    #book {
+      /* sb-openbook 摊开的书 */
+      flex-direction: row; width: 100%; max-width: 1240px; height: 100%; max-height: 700px;
+      background: linear-gradient(90deg, #F4E8CF 0%, #FBF3DF 46%, #E8D8B8 50%, #FBF3DF 54%, #F4E8CF 100%);
+      border-radius: 16px;
+      box-shadow: 0 0 0 8px #8A4F26, 0 0 0 10px #6E3D1C, 0 24px 48px rgba(0, 0, 0, .45);
     }
-    #pic img, #pic .placeholder {
-      /* 插画本身保持原有渲染 */
+    /* 左页:插画 + 金色辉光(sb-art-glow) */
+    #artpane { flex: 1; min-width: 0; padding: clamp(18px, 3.4vh, 34px) 22px clamp(18px, 3.4vh, 34px) clamp(20px, 3vw, 38px); }
+    #artframe {
+      border-radius: 16px; border: none;
+      box-shadow: 0 0 0 4px #F2DFA8, 0 0 24px 6px rgba(247, 197, 68, .5);
     }
-    /* 书缝(左右页之间) */
-    #text {
-      flex: 1; min-width: 0;
-      border-top: none;
-      border-left: none;
-      padding: clamp(24px, 4vh, 44px) clamp(24px, 3vw, 46px) clamp(18px, 3vh, 30px) 26px;
-      display: flex; flex-direction: column; justify-content: space-between;
-      /* 微妙渐变书缝投影 */
-      background: linear-gradient(90deg, rgba(89,53,26,.12) 0%, rgba(89,53,26,.02) 8%, transparent 100%);
+    #pagebadge { display: none; }
+    /* 书缝 */
+    #gutter {
+      display: block; width: 26px; flex-shrink: 0;
+      background: linear-gradient(90deg, transparent, rgba(89,53,26,.18) 48%, rgba(89,53,26,.28) 50%, rgba(89,53,26,.18) 52%, transparent);
     }
-    #pagetitle { font-size: 19px; }
-    #narration { font-size: 19px; }
-    #covertitle { font-size: 36px; }
-    #coverauthor { font-size: 18px; }
-    /* 页码悬浮徽章(宽屏) */
-    footer {
-      position: absolute; right: 20px; bottom: 12px;
-      background: rgba(255,253,244,.85); border-radius: 999px;
-      padding: 3px 14px; font-size: 12px; z-index: 3;
+    /* 右页:文字(融入书页,非浮卡) */
+    #textpane {
+      flex: 1; min-width: 0; margin: 0; background: transparent;
+      border-radius: 0; box-shadow: none;
+      padding: clamp(20px, 4vh, 44px) clamp(24px, 3vw, 46px) clamp(16px, 3vh, 30px) 26px;
     }
+    #pageno { display: block; }
+    /* 桌面两侧大翻页钮落在木桌上 */
+    .pagebtn { width: 62px; height: 62px; top: 50%; }
+    #prevbtn { left: 20px; }
+    #nextbtn { right: 20px; }
+    h1#booktitle { font-size: 26px; }
   }
 
-  /* ── 超宽屏(≥ 1200px)微调阅读舒适度 ─────────────────── */
-  @media (min-width: 1200px) {
-    #stage { max-width: 1240px; margin: 0 auto; }
-    #pagetitle { font-size: 22px; }
-    #narration { font-size: 22px; }
-    #covertitle { font-size: 44px; }
+  /* ── 打印(每页一版;隐藏界面与装饰层) ─────────────────── */
+  #printpages { display: none; }
+  @media print {
+    body > header, body > main, #doodles { display: none; }
+    body { overflow: visible; background: #fff; }
+    body::after { display: none; }
+    #printpages { display: block; }
+    .print-page { page-break-after: always; text-align: center; padding: 24px; }
+    .print-page img { max-width: 100%; max-height: 70vh; }
+    .print-page .pp-title { font-family: var(--font-title); font-size: 20px; margin: 12px 0 6px; }
+    .print-page .pp-text { font-size: 14px; line-height: 1.6; text-align: left; white-space: pre-wrap; }
   }
 </style>
 </head>
 <body>
 <script id="book-data" type="application/json">__BOOK_JSON__</script>
+<div id="doodles" aria-hidden="true"></div>
 <header>
   <h1 id="booktitle"></h1>
-  <button class="sticker" id="langbtn" title="切换语言 / language">中 / EN</button>
-  <button class="sticker" id="speakbtn" title="朗读本页"><span>🔊</span> <span class="btn-label">读给我听</span></button>
-  <button class="sticker" onclick="window.print()" title="打印或另存为 PDF">🖨️ <span class="btn-label">打印</span></button>
+  <button class="sticker st-paper" id="printbtn" onclick="window.print()" title="打印或另存为 PDF / Print or save as PDF">🖨️ <span id="printlabel">打印</span></button>
+  <button class="sticker" id="langbtn" aria-label="切换语言 Toggle language">
+    <span class="pill on" id="pill-zh">CN</span><span class="sep">/</span><span class="pill" id="pill-en">EN</span>
+  </button>
 </header>
 <main>
-  <button class="pagebtn" id="prevbtn">‹</button>
-  <div id="stage">
-    <div id="pic"></div>
-    <div id="text">
-      <div id="pagetitle"></div>
-      <div id="narration"></div>
+  <div id="book" class="flipstage">
+    <div id="artpane">
+      <div id="artframe">
+        <div id="pic"></div>
+      </div>
+      <span id="pagebadge"></span>
+    </div>
+    <div id="gutter"></div>
+    <div id="textpane">
+      <div id="pagetext"></div>
+      <div id="bottomrow">
+        <div id="speakrow">
+          <button class="sticker st-honey" id="speakbtn" title="朗读本页 / Read this page aloud">
+            <span id="speakicon">🦉</span> <span id="speaklabel">读给我听</span>
+          </button>
+        </div>
+        <div id="pageno"></div>
+      </div>
     </div>
   </div>
-  <button class="pagebtn" id="nextbtn">›</button>
+  <button class="pagebtn" id="prevbtn" aria-label="上一页 Previous page">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h13M13 6l6 6-6 6" stroke="#FFF8E8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <button class="pagebtn" id="nextbtn" aria-label="下一页 Next page">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h13M13 6l6 6-6 6" stroke="#FFF8E8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
 </main>
-<footer id="pageno"></footer>
 <div id="printpages"></div>
 <script>
 "use strict";
 var BOOK = JSON.parse(document.getElementById("book-data").textContent);
-var state = { i: 0, lang: "zh", dir: "next" };
+/* 逻辑页码 index / 显示页码 shown 分层 —— 翻页纸盖住插画的瞬间才切换内容
+   (设计稿 chat2 修复的揭示时机,useReaderState 的 vanilla 移植) */
+var state = { index: 0, shown: 0, lang: "zh", dir: "next" };
+var TOTAL = BOOK.pages.length;
 var PLACEHOLDER = '<div class="placeholder">🎨<small>这一页的插画休息啦<br>This page\'s picture is resting</small></div>';
+var STR = {
+  readToMe: { zh: "读给我听", en: "Read to Me" },
+  stop:     { zh: "停止",     en: "Stop" },
+  print:    { zh: "打印",     en: "Print" },
+  cover:    { zh: " (封面)",  en: " (cover)" }
+};
+var mqDesktop = window.matchMedia("(min-width: 900px) and (orientation: landscape)");
+var mqReduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function t(pair, lang) { return (pair && (pair[lang] || pair.zh || pair.en)) || ""; }
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/* ── 彩虹标题(sb-ui RainbowTitle:7 色循环 + 微旋转抖动) ── */
+var RAINBOW = ["#F2766B", "#F0A04B", "#E8C547", "#7FBF7F", "#6FA8DC", "#9B7FD4", "#D48FC0"];
+function renderTitle() {
+  var text = t(BOOK.title, state.lang);
+  document.title = text;
+  var html = "";
+  var chars = Array.from(text);
+  for (var i = 0; i < chars.length; i++) {
+    var c = chars[i] === " " ? "&nbsp;" : esc(chars[i]);
+    html += '<span class="rl" style="color:' + RAINBOW[i % RAINBOW.length] +
+      ';transform:rotate(' + (i % 2 === 0 ? -2 : 2) + 'deg) translateY(' + (i % 3 === 1 ? -2 : 0) + 'px)">' + c + "</span>";
+  }
+  document.getElementById("booktitle").innerHTML = html;
+}
+
+/* ── 涂鸦背景(sb-ui Doodles,密度=重:34 字符 + 8 云 + 3 彩虹弧) ── */
+function buildDoodles() {
+  var GLYPHS = ["✦", "✶", "☾", "✧", "○", "◌", "✩", "☽", "✢", "✴"];
+  var COLORS = ["var(--line)", "var(--line)", "var(--line)", "#E8B7A0", "#BBD9C5", "#EAD08F", "#CDBBE0"];
+  var SEED = [
+    [4, 8], [14, 22], [8, 46], [5, 72], [12, 90], [3, 32], [9, 60],
+    [90, 6], [95, 30], [88, 55], [93, 78], [86, 94], [97, 48], [91, 66],
+    [30, 4], [55, 7], [72, 3], [45, 94], [68, 90], [25, 95], [82, 10], [18, 6],
+    [38, 14], [62, 12], [22, 38], [78, 36], [35, 56], [66, 52], [28, 74], [74, 70],
+    [48, 30], [52, 68], [42, 46], [58, 86]
+  ];
+  var CLOUDS = [[6, 14], [88, 18], [10, 80], [84, 84], [40, 6], [60, 92], [2, 50], [94, 40]];
+  var RBOWS = [[20, 16], [76, 88], [50, 40]];
+  var html = "";
+  for (var i = 0; i < SEED.length; i++) {
+    html += '<span class="doodle" style="left:' + SEED[i][0] + "%;top:" + SEED[i][1] +
+      "%;font-size:" + (11 + ((i * 7) % 18)) + "px;opacity:" + ((i * 13) % 3 === 0 ? 0.55 : 0.35) +
+      ";color:" + COLORS[(i * 5) % COLORS.length] +
+      ";transform:rotate(" + (((i * 37) % 56) - 28) + 'deg)">' + GLYPHS[(i * 3) % GLYPHS.length] + "</span>";
+  }
+  for (var j = 0; j < CLOUDS.length; j++) {
+    var sc = 0.8 + (j % 3) * 0.25;
+    html += '<span class="cloud" style="left:' + CLOUDS[j][0] + "%;top:" + CLOUDS[j][1] + "%;transform:scale(" + sc + ')">' +
+      '<i style="width:14px;height:14px"></i>' +
+      '<i style="width:20px;height:20px;margin-left:-6px;margin-top:-5px"></i>' +
+      '<i style="width:13px;height:13px;margin-left:-6px"></i></span>';
+  }
+  for (var k = 0; k < RBOWS.length; k++) {
+    html += '<span class="rbow" style="left:' + RBOWS[k][0] + "%;top:" + RBOWS[k][1] + '%">' +
+      '<i style="width:30px;height:15px;border-radius:30px 30px 0 0;border:2px solid #E8B7A0;border-bottom:none"></i>' +
+      '<i style="width:20px;height:10px;border-radius:20px 20px 0 0;border:2px solid #BBD9C5;border-bottom:none;margin:-12px 0 0 5px"></i></span>';
+  }
+  document.getElementById("doodles").innerHTML = html;
+}
 
 function pageImage(p) {
   if (!p.image || p.image === "") { return PLACEHOLDER; }
   return '<img alt="illustration" src="' + p.image + '">';
 }
 
-/* ── 自适应字号(移植设计稿 autoFontSize) ────────────── */
+/* ── 自动字号(设计稿 autoFontSize:越长越小,最小 17px;滚动兜底) ── */
 function autoFontSize(text, lang, base) {
   var len = lang === "zh" ? text.length : Math.ceil(text.length / 2.2);
   var f = len <= 70 ? 1 : len <= 110 ? 0.86 : len <= 160 ? 0.76 : 0.68;
   return Math.max(17, Math.round(base * f));
 }
+function baseFontSize() {
+  if (mqDesktop.matches) {
+    return Math.round(Math.min(27, Math.max(20, window.innerHeight / 28)));
+  }
+  return 22;
+}
 
-function render() {
-  var p = BOOK.pages[state.i];
+/* ── 朗读(useSpeak 移植:点击切换播放/停止,翻页/切语言自动停) ── */
+var speaking = false;
+function setSpeaking(on) {
+  speaking = on;
+  document.body.classList.toggle("speaking", on);
+  document.getElementById("speaklabel").textContent = t(on ? STR.stop : STR.readToMe, state.lang);
+}
+function stopSpeech() {
+  if (window.speechSynthesis) { try { speechSynthesis.cancel(); } catch (e) { /* noop */ } }
+  setSpeaking(false);
+}
+
+/* ── 渲染:chrome(按逻辑页码)/ page(按显示页码) ────────── */
+function renderChrome() {
+  renderTitle();
+  document.getElementById("pill-zh").className = "pill" + (state.lang === "zh" ? " on" : "");
+  document.getElementById("pill-en").className = "pill" + (state.lang === "en" ? " on" : "");
+  document.getElementById("printlabel").textContent = t(STR.print, state.lang);
+  document.getElementById("speaklabel").textContent = t(speaking ? STR.stop : STR.readToMe, state.lang);
+  document.getElementById("prevbtn").disabled = state.index === 0;
+  document.getElementById("nextbtn").disabled = state.index >= TOTAL - 1;
+}
+
+function renderPage(animate) {
+  var p = BOOK.pages[state.shown];
   var lang = state.lang;
   document.documentElement.lang = lang === "zh" ? "zh" : "en";
-  document.title = t(BOOK.title, lang);
-  document.getElementById("booktitle").textContent = t(BOOK.title, lang);
-
-  /* 翻页动画:在 #pic 和 #text 上加 anim-next / anim-prev */
-  var picEl = document.getElementById("pic");
-  var textEl = document.getElementById("text");
-  picEl.classList.remove("anim-next", "anim-prev");
-  textEl.classList.remove("anim-next", "anim-prev");
-  /* 强制回流以便重新触发动画 */
-  void picEl.offsetWidth;
-  var animClass = state.dir === "next" ? "anim-next" : "anim-prev";
-  picEl.classList.add(animClass);
-  textEl.classList.add(animClass);
-
-  picEl.innerHTML = pageImage(p);
-  var isCover = p.page_no === 0;
-  var titleEl = document.getElementById("pagetitle");
-  var narEl = document.getElementById("narration");
-
-  if (isCover) {
-    titleEl.innerHTML = '<div id="covertitle">' + t(BOOK.title, lang) +
-      '</div><div id="coverauthor">' + (BOOK.author || "") + "</div>";
-    narEl.textContent = "";
-    /* 封面页不设自适应字号 */
-    narEl.style.fontSize = "";
-  } else {
-    titleEl.textContent = t(p.page_title, lang);
-    var narText = t(p.narration, lang);
-    narEl.textContent = narText;
-    /* 自适应字号:按 base 在窄屏 17 / 宽屏 19 / 超宽 22 */
-    var base = window.innerWidth >= 1200 ? 22 : window.innerWidth >= 820 ? 19 : 17;
-    narEl.style.fontSize = autoFontSize(narText, lang, base) + "px";
+  var pic = document.getElementById("pic");
+  pic.classList.remove("anim-next", "anim-prev");
+  if (animate) {
+    void pic.offsetWidth; /* 强制回流以重触发动画 */
+    pic.classList.add(state.dir === "next" ? "anim-next" : "anim-prev");
   }
+  pic.innerHTML = pageImage(p);
 
-  document.getElementById("prevbtn").disabled = state.i === 0;
-  document.getElementById("nextbtn").disabled = state.i === BOOK.pages.length - 1;
-  document.getElementById("pageno").textContent =
-    (state.i + 1) + " / " + BOOK.pages.length + (isCover ? (lang === "zh" ? " (封面)" : " (cover)") : "");
-  if (window.speechSynthesis) { speechSynthesis.cancel(); }
+  var base = baseFontSize();
+  var box = document.getElementById("pagetext");
+  if (p.page_no === 0) {
+    /* 封面:书名 + 作者 + 风格(设计迭代#3:无 📖 图标) */
+    box.className = "cover";
+    box.innerHTML =
+      '<div id="covertitle" style="font-size:' + Math.round(base * 1.4) + 'px">' + esc(t(BOOK.title, lang)) + "</div>" +
+      '<div id="coverauthor" style="font-size:' + Math.round(base * 0.72) + 'px">' +
+        esc(lang === "zh" ? (BOOK.author || "") + " · 著" : "by " + (BOOK.author || "")) + "</div>" +
+      (BOOK.style ? '<div id="coverstyle" style="font-size:' + Math.round(base * 0.58) + 'px">' + esc(BOOK.style) + "</div>" : "");
+  } else {
+    box.className = "";
+    var narText = t(p.narration, lang);
+    var fs = autoFontSize(narText, lang, base);
+    var titleText = t(p.page_title, lang);
+    box.innerHTML =
+      (titleText ? '<div id="pagetitle" style="font-size:' + Math.round(base * 0.78) + 'px">' + esc(titleText) + "</div>" : "") +
+      '<p id="narration" style="font-size:' + fs + 'px"></p>';
+    box.querySelector("#narration").textContent = narText;
+  }
+  var badge = (state.shown + 1) + " / " + TOTAL + (p.page_no === 0 ? t(STR.cover, lang) : "");
+  document.getElementById("pagebadge").textContent = badge;
+  document.getElementById("pageno").textContent = badge;
+}
+
+/* ── 仿真翻页纸(FlipSheet 移植) ────────────────────────── */
+var flipEl = null, flipCleanup = null, revealTimer = null;
+function spawnFlipSheet(dir, mobile) {
+  if (flipEl) { flipEl.remove(); flipEl = null; }
+  if (flipCleanup) { clearTimeout(flipCleanup); }
+  var el = document.createElement("div");
+  el.className = "flipsheet " + (mobile ? (dir === "next" ? "flip-next-m" : "flip-prev-m")
+                                        : (dir === "next" ? "flip-next" : "flip-prev"));
+  el.setAttribute("aria-hidden", "true");
+  var book = document.getElementById("book");
+  if (mobile) {
+    /* 移动端:整页掀起,纸覆盖整个画框 */
+    var frame = document.getElementById("artframe").getBoundingClientRect();
+    var host = book.getBoundingClientRect();
+    el.style.left = (frame.left - host.left) + "px";
+    el.style.top = (frame.top - host.top) + "px";
+    el.style.width = frame.width + "px";
+    el.style.height = frame.height + "px";
+    el.style.borderRadius = "20px";
+  } else {
+    /* 桌面:右半页从书缝掀起(设计稿 {top:4,bottom:4,left:50%,right:4}) */
+    el.style.top = "4px"; el.style.bottom = "4px";
+    el.style.left = "50%"; el.style.right = "4px";
+  }
+  book.appendChild(el);
+  flipEl = el;
+  flipCleanup = setTimeout(function () {
+    if (flipEl === el) { el.remove(); flipEl = null; }
+  }, 700);
 }
 
 function go(delta) {
-  var n = state.i + delta;
-  if (n < 0 || n >= BOOK.pages.length) { return; }
+  var n = state.index + delta;
+  if (n < 0 || n >= TOTAL) { return; }
+  state.index = n;
   state.dir = delta > 0 ? "next" : "prev";
-  state.i = n; render();
+  stopSpeech();
+  renderChrome();
+  if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
+  var mobile = !mqDesktop.matches;
+  if (mqReduced.matches) {
+    state.shown = state.index;
+    renderPage(false);
+    return;
+  }
+  spawnFlipSheet(state.dir, mobile);
+  /* 揭示时机(设计稿 chat2 修复值):
+     移动端 next=0(掀起即露出,物理正确)/ prev=480ms(纸落下盖住后切换)
+     桌面端 next=470ms(纸翻落到左页时)/ prev=110ms(纸起始仍盖着左页) */
+  var delay = mobile ? (state.dir === "next" ? 0 : 480)
+                     : (state.dir === "next" ? 470 : 110);
+  if (delay === 0) {
+    state.shown = state.index;
+    renderPage(true);
+    return;
+  }
+  revealTimer = setTimeout(function () {
+    state.shown = state.index;
+    renderPage(true);
+    revealTimer = null;
+  }, delay);
 }
 
 document.getElementById("prevbtn").onclick = function () { go(-1); };
 document.getElementById("nextbtn").onclick = function () { go(1); };
 document.getElementById("langbtn").onclick = function () {
   state.lang = state.lang === "zh" ? "en" : "zh";
-  state.dir = "next";  /* 语言切换不用逆向动画 */
-  render();
+  stopSpeech();
+  renderChrome();
+  renderPage(false);
 };
 
 var speakBtn = document.getElementById("speakbtn");
-var speakIcon = speakBtn.querySelector("span");
 if (!window.speechSynthesis) {
   speakBtn.disabled = true; speakBtn.style.opacity = ".4";
-  speakBtn.title = "此浏览器不支持语音合成";
+  speakBtn.title = "此浏览器不支持语音合成 / Speech synthesis unavailable";
 } else {
   speakBtn.onclick = function () {
-    var p = BOOK.pages[state.i];
+    if (speaking) { stopSpeech(); return; }
+    var p = BOOK.pages[state.shown];
     var text = p.page_no === 0 ? t(BOOK.title, state.lang) : t(p.narration, state.lang);
     if (!text) { return; }
-    /* 如果正在朗读则停止;否则开始 */
-    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-      speechSynthesis.cancel();
-      document.body.classList.remove("speaking");
-      return;
-    }
     speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(text);
     u.lang = state.lang === "zh" ? "zh-CN" : "en-US";
     u.rate = 0.92;
-    u.onend = function () { document.body.classList.remove("speaking"); };
-    u.onerror = function () { document.body.classList.remove("speaking"); };
-    document.body.classList.add("speaking");
-    if (speakIcon) { speakIcon.classList.add("sticker-onair"); }
+    u.onend = function () { setSpeaking(false); };
+    u.onerror = function () { setSpeaking(false); };
+    setSpeaking(true);
     speechSynthesis.speak(u);
   };
 }
 
+/* 键盘(设计稿:←→ 与 ↑↓ 都翻页)+ 触屏滑动 */
 document.addEventListener("keydown", function (e) {
-  if (e.key === "ArrowLeft") { go(-1); }
-  if (e.key === "ArrowRight") { go(1); }
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") { go(1); }
+  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { go(-1); }
 });
 var touchX = null;
 document.addEventListener("touchstart", function (e) { touchX = e.touches[0].clientX; });
@@ -438,19 +603,27 @@ document.addEventListener("touchend", function (e) {
   touchX = null;
 });
 
+/* 断点切换时重排字号与页码位置 */
+function onModeChange() { renderPage(false); }
+if (mqDesktop.addEventListener) { mqDesktop.addEventListener("change", onModeChange); }
+else if (mqDesktop.addListener) { mqDesktop.addListener(onModeChange); }
+
+/* ── 打印页(每页一版,中英双语) ────────────────────────── */
 (function buildPrint() {
   var holder = document.getElementById("printpages");
   var html = "";
   BOOK.pages.forEach(function (p) {
     html += '<div class="print-page">' + pageImage(p) +
-      '<div class="pp-title">' + (p.page_no === 0 ? t(BOOK.title, "zh") : t(p.page_title, "zh")) + "</div>" +
-      '<div class="pp-text">' + (p.page_no === 0 ? (BOOK.author || "") :
+      '<div class="pp-title">' + esc(p.page_no === 0 ? t(BOOK.title, "zh") : t(p.page_title, "zh")) + "</div>" +
+      '<div class="pp-text">' + esc(p.page_no === 0 ? (BOOK.author || "") :
         (t(p.narration, "zh") + "\n\n" + t(p.narration, "en"))) + "</div></div>";
   });
   holder.innerHTML = html;
 })();
 
-render();
+buildDoodles();
+renderChrome();
+renderPage(false);
 </script>
 </body>
 </html>
