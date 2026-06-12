@@ -104,3 +104,83 @@ def make_book(tmpdir, **kwargs):
 
 def tmp():
     return tempfile.TemporaryDirectory()
+
+
+# ── fake OpenAI-compatible images API (for test_gen_image.py) ──────────
+
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class FakeImageAPI:
+    """Serves POST /v1/images/generations and GET /img.png on 127.0.0.1.
+
+    mode: "b64" → returns data[0].b64_json; "url" → returns data[0].url.
+    fail_times: first N POSTs answer 500 (retry testing).
+    """
+
+    def __init__(self, mode="b64", fail_times=0):
+        self.mode = mode
+        self.fail_times = fail_times
+        self.posts = 0
+        api = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _json(self, code, obj):
+                body = json.dumps(obj).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):
+                api.posts += 1
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                if api.posts <= api.fail_times:
+                    self._json(500, {"error": {"message": "boom"}})
+                    return
+                if api.mode == "b64":
+                    self._json(200, {"data": [{"b64_json":
+                        base64.b64encode(TINY_PNG).decode("ascii")}]})
+                else:
+                    self._json(200, {"data": [{"url":
+                        "http://127.0.0.1:%d/img.png" % api.port}]})
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(TINY_PNG)))
+                self.end_headers()
+                self.wfile.write(TINY_PNG)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        self.base_url = "http://127.0.0.1:%d/v1" % self.port
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *a):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def run_gen(*args, env_extra=None, cwd=None):
+    env = dict(os.environ)
+    env.pop("STORYBOOK_IMAGE_API_KEY", None)  # isolate from real env
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.run(
+        [sys.executable, str(GEN_SCRIPT), *[str(a) for a in args]],
+        capture_output=True, text=True, cwd=str(cwd or ROOT), env=env,
+    )
+    payload = {}
+    if proc.stdout.strip():
+        payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    return proc.returncode, payload, proc.stderr
