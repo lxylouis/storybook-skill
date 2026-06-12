@@ -66,8 +66,10 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
 2. **轨道 B(兜底)**:没有图像工具时,
    `python3 <skill>/scripts/gen_image.py --prompt-file - --out <tmp>.png`
    (stdin 喂 prompt;需要环境变量 `STORYBOOK_IMAGE_API_KEY`,可选
-   `_BASE_URL/_MODEL/_SIZE`,OpenAI images 兼容)。`doctor` 可查配置是否就绪;
-   两者都没有时如实告诉用户需要配置哪一样,不要假装出图。
+   `_BASE_URL/_MODEL/_SIZE`,OpenAI images 兼容)。**用户的 key 是阿里云百炼
+   (DashScope)时改用 `scripts/gen_image_dashscope.py`**(参数与环境变量同款,
+   原生 multimodal-generation 格式,默认 wan2.7-image)。`doctor` 可查配置是否
+   就绪;两者都没有时如实告诉用户需要配置哪一样,不要假装出图。
 
 两轨殊途同归:`save-image --page <id> --file <生成的图>`。
 

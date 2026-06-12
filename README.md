@@ -23,7 +23,9 @@ skill 即本目录整体(SKILL.md + scripts/ + references/ + assets/)。
 
 1. **宿主自带图像工具**(Hermes 内建、Claude Code/OpenClaw 的 MCP 图像服务
    等):无需任何配置,skill 会优先用它。
-2. **兜底脚本** `scripts/gen_image.py`(OpenAI images API 兼容):
+2. **兜底脚本**(按你的 key 二选一):OpenAI 兼容服务用 `scripts/gen_image.py`;
+   阿里云百炼(DashScope)用 `scripts/gen_image_dashscope.py`(原生
+   multimodal-generation 格式,默认 wan2.7-image)。环境变量两者同款:
 
 ```bash
 export STORYBOOK_IMAGE_API_KEY=sk-...
@@ -39,6 +41,7 @@ export STORYBOOK_IMAGE_SIZE=1024x1536
 |---|---|---|---|
 | OpenAI | https://api.openai.com/v1 | gpt-image-1 | 1024x1536 |
 | OpenAI(旧) | https://api.openai.com/v1 | dall-e-3 | 1024x1792 |
+| 阿里云百炼 DashScope(用 `gen_image_dashscope.py`) | https://dashscope.aliyuncs.com/api/v1(默认值,可不设) | wan2.7-image / wan2.7-image-pro | 1024x1536(脚本自动转 `1024×1536`;宽高须在 768–2048) |
 | 其他 OpenAI 兼容服务(硅基流动、各大模型厂商等) | 以服务商文档为准 | 以服务商文档为准 | 选最接近 2:3 竖版的档位(如 960x1280、832x1216) |
 
 > 1024x1536 不是行业标准,只是 OpenAI 方言的竖版档位;`STORYBOOK_IMAGE_SIZE`
