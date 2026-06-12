@@ -650,6 +650,29 @@ def _do_export(book_dir, data, inline):
     return out_path
 
 
+def cmd_finalize(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "illustrating")
+    missing = [p.get("id", "?") for p in data.get("pages", [])
+               if not (p.get("image_file") or "").strip()]
+    if missing:
+        _fail("以下页面缺少插画: %s" % ", ".join(missing),
+              hint="这些页面还没生成图片。补图(compose-prompt → 生成 → "
+                   "save-image),或对反复失败的页面用 skip。补齐后再 finalize。",
+              current_phase=data.get("phase"))
+    data["phase"] = "delivered"
+    _write_book(args.dir, data)
+    out_path = _do_export(args.dir, data, inline=True)
+    _emit({
+        "ok": True, "phase": "delivered",
+        "page_count": len(data.get("pages", [])),
+        "html": str(out_path.resolve()),
+        "next_action": "Book delivered! Give the user the HTML path "
+                       "(double-click to open; Print = PDF). Later revisions: "
+                       "amend-page / regenerate → save-image → export.",
+    })
+
+
 def cmd_export(args):
     data = _load_book(args.dir)
     _require_phase(data, "awaiting_outline_confirm", "illustrating", "delivered")
@@ -744,6 +767,10 @@ def build_parser():
     p.add_argument("--file", required=True, help="outline JSON path, or - for stdin")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_save_outline)
+
+    p = sub.add_parser("finalize", help="Validate, deliver, and export.")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_finalize)
 
     p = sub.add_parser("export", help="Render the self-contained HTML book.")
     p.add_argument("--link-images", action="store_true",

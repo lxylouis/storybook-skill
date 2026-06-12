@@ -230,5 +230,32 @@ class TestAmendRegenerateSkip(unittest.TestCase):
             self.assertEqual(data["pages"][3]["skip_reason"], "content policy")
 
 
+class TestFinalize(unittest.TestCase):
+    def test_blocked_when_pages_missing_images(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")  # 全部无图
+            code, out, _ = helpers.run_cli("finalize", "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("缺少插画", out["error"])
+            self.assertIn("page-1", out["error"])
+
+    def test_finalize_delivers_and_exports(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            code, out, _ = helpers.run_cli("finalize", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(helpers.read_book(d)["phase"], "delivered")
+            self.assertTrue(Path(out["html"]).is_file())
+
+    def test_skipped_pages_do_not_block(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            data = helpers.read_book(d)
+            data["pages"][3]["image_file"] = "skipped"
+            helpers.write_book(d, data)
+            code, _, _ = helpers.run_cli("finalize", "--dir", d)
+            self.assertEqual(code, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
