@@ -13,8 +13,8 @@ skill 即本目录整体(SKILL.md + scripts/ + references/ + assets/)。
 
 | 宿主 | 安装方式 |
 |---|---|
-| Claude Code | `git clone <repo-url> ~/.claude/skills/storybook`(或放入项目 `.claude/skills/storybook`) |
-| OpenClaw | `openclaw skills install <repo-url>`,或解压到 `~/.openclaw/skills/storybook`(全局)/ workspace `skills/storybook` |
+| Claude Code | `git clone <repo-url> ~/.claude/skills/storybook-skill`(或放入项目 `.claude/skills/storybook-skill`) |
+| OpenClaw | `openclaw skills install <repo-url>`,或解压到 `~/.openclaw/skills/storybook-skill`(全局)/ workspace `skills/storybook-skill` |
 | Hermes Agent | 放入其 skills 目录(兼容 agentskills.io 标准;以官方文档为准) |
 
 要求:`python3` ≥ 3.9 在 PATH 上(macOS 自带的 3.9.6 即可)。无三方依赖。
