@@ -103,12 +103,15 @@
   }
   .sticker:hover  { transform: translateY(-1px) scale(1.02); }
   .sticker:active { transform: translateY(1px) scale(.98); }
-  .st-paper { background: var(--paper-card); border-color: rgba(89,53,26,.35); color: var(--ink-soft); padding: 6px 14px; font-size: 14px; }
+  /* 移动端默认紧凑:打印钮只留图标、语言键用 compact 规格(设计稿 LangToggle compact),
+     把顶栏空间尽量让给书名;桌面媒体查询里再放大还原 */
+  .st-paper { background: var(--paper-card); border-color: rgba(89,53,26,.35); color: var(--ink-soft); padding: 6px 10px; font-size: 14px; }
+  #printlabel { display: none; }
   /* 读给我听:饱和橙金(设计迭代#3 指定 honey) */
   .st-honey { background: var(--honey); border-color: var(--honey-deep); color: #FFF8E8; padding: 9px 20px; font-size: 16px; }
   /* CN/EN 切换(sb-ui LangToggle) */
-  #langbtn { background: var(--paper-card); border-color: var(--coral-deep); padding: 4px 6px; gap: 4px; font-size: 15px; }
-  #langbtn .pill { padding: 3px 10px; border-radius: 999px; font-weight: 800; color: var(--ink-faint); transition: all .2s ease; }
+  #langbtn { background: var(--paper-card); border-color: var(--coral-deep); padding: 3px 4px; gap: 2px; font-size: 12.5px; border-width: 2.5px; }
+  #langbtn .pill { padding: 2px 9px; border-radius: 999px; font-weight: 800; color: var(--ink-faint); transition: all .2s ease; }
   #langbtn .pill.on { background: var(--honey); color: #FFF8E8; }
   #langbtn .sep { color: var(--ink-faint); font-weight: 700; }
   @keyframes sb-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
@@ -177,7 +180,9 @@
   #textpane::-webkit-scrollbar { width: 8px; }
   #textpane::-webkit-scrollbar-track { background: transparent; }
   #textpane::-webkit-scrollbar-thumb { background: rgba(140, 90, 51, .25); border-radius: 999px; }
-  #pagetext { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+  /* 注意:不能加 min-height:0 —— flex 项保持 min-height:auto(不可压缩到内容以下),
+     长文才会把溢出推给外层 #textpane 滚动(设计稿的滚动兜底机制) */
+  #pagetext { flex: 1; display: flex; flex-direction: column; justify-content: center; }
   #pagetitle { font-family: var(--font-title); font-weight: 700; color: var(--ink-soft); margin-bottom: 8px; }
   #narration { font-family: var(--font-story); font-weight: 700; line-height: 1.75; color: var(--ink); white-space: pre-wrap; text-wrap: pretty; }
   /* 封面页(无 📖 图标:书名 + 作者 + 风格) */
@@ -291,6 +296,11 @@
     #prevbtn { left: 20px; }
     #nextbtn { right: 20px; }
     h1#booktitle { font-size: 26px; }
+    /* 桌面端还原完整控件 */
+    #printlabel { display: inline; }
+    .st-paper { padding: 6px 14px; }
+    #langbtn { padding: 4px 6px; gap: 4px; font-size: 15px; border-width: 3px; }
+    #langbtn .pill { padding: 3px 10px; }
   }
 
   /* ── 打印(每页一版;隐藏界面与装饰层) ─────────────────── */
@@ -380,7 +390,15 @@ function renderTitle() {
     html += '<span class="rl" style="color:' + RAINBOW[i % RAINBOW.length] +
       ';transform:rotate(' + (i % 2 === 0 ? -2 : 2) + 'deg) translateY(' + (i % 3 === 1 ? -2 : 0) + 'px)">' + c + "</span>";
   }
-  document.getElementById("booktitle").innerHTML = html;
+  var el = document.getElementById("booktitle");
+  el.innerHTML = html;
+  /* 标题自适应:放不下先逐档缩字号(下限 16px),仍不够才走 CSS 省略号 */
+  var size = mqDesktop.matches ? 26 : 24;
+  el.style.fontSize = size + "px";
+  while (size > 16 && el.scrollWidth > el.clientWidth) {
+    size -= 2;
+    el.style.fontSize = size + "px";
+  }
 }
 
 /* ── 涂鸦背景(sb-ui Doodles,密度=重:34 字符 + 8 云 + 3 彩虹弧) ── */
@@ -603,8 +621,8 @@ document.addEventListener("touchend", function (e) {
   touchX = null;
 });
 
-/* 断点切换时重排字号与页码位置 */
-function onModeChange() { renderPage(false); }
+/* 断点切换时重排标题/字号与页码位置 */
+function onModeChange() { renderChrome(); renderPage(false); }
 if (mqDesktop.addEventListener) { mqDesktop.addEventListener("change", onModeChange); }
 else if (mqDesktop.addListener) { mqDesktop.addListener(onModeChange); }
 
