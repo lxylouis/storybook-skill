@@ -167,3 +167,19 @@ class TestSaveImageGuards(unittest.TestCase):
                                            "--file", src, "--dir", d)
             self.assertEqual(code, 2)
             self.assertIn("png", out["hint"])
+
+
+class TestConfirmOutline(unittest.TestCase):
+    def test_blocked_without_cover_image(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="awaiting_outline_confirm")  # 无图
+            code, out, _ = helpers.run_cli("confirm-outline", "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("cover", out["error"].lower())
+            self.assertIn("save-image", out["hint"])
+
+    def test_wrong_phase_blocked(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="outlining")
+            code, _, _ = helpers.run_cli("confirm-outline", "--dir", d)
+            self.assertEqual(code, 2)

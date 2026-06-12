@@ -411,6 +411,72 @@ def cmd_save_image(args):
     _emit(result)
 
 
+def _page_brief(page):
+    return {
+        "page_id": page.get("id", ""), "page_no": page.get("page_no", 0),
+        "page_title": page.get("page_title", {}),
+        "narration": page.get("narration", {}),
+        "image_prompt": page.get("image_prompt", ""),
+    }
+
+
+def cmd_confirm_outline(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "awaiting_outline_confirm")
+    cover_file = (data.get("cover", {}).get("image_file") or "").strip()
+    if not cover_file or cover_file == SKIP_SENTINEL:
+        _fail("cover image missing — cannot confirm outline",
+              hint="Generate the cover first: compose-prompt --page cover → "
+                   "image tool / scripts/gen_image.py → save-image --page "
+                   "cover --file <img>. Then confirm-outline.",
+              current_phase=data.get("phase"))
+    pages = data.get("pages", [])
+    start_idx = 1 if len(pages) > 1 else 0
+    data["current_page_index"] = start_idx
+    data["phase"] = "illustrating"
+    _write_book(args.dir, data)
+    brief = _page_brief(pages[start_idx])
+    brief.update({
+        "ok": True, "phase": "illustrating",
+        "total_pages": len(pages),
+        "next_action": "AUTO-LOOP from this page to the last WITHOUT pausing: "
+                       "for each page run compose-prompt → generate image → "
+                       "save-image → next; report one line of progress per "
+                       "page. On generation failure run `regenerate` (logs the "
+                       "attempt) and retry; after 3 failures suggest `skip`. "
+                       "When next says all_done, run `finalize`.",
+    })
+    _emit(brief)
+
+
+def cmd_next(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "illustrating")
+    pages = data.get("pages", [])
+    if not pages:
+        _fail("no pages — save-outline first")
+    next_idx = int(data.get("current_page_index", 0)) + 1
+    data["current_page_index"] = next_idx
+    _write_book(args.dir, data)
+    if next_idx >= len(pages):
+        _emit({
+            "ok": True, "all_done": True, "total_pages": len(pages),
+            "next_action": "All pages illustrated. Run `finalize` to deliver "
+                           "(validates every page, sets phase=delivered, and "
+                           "exports the HTML).",
+        })
+    brief = _page_brief(pages[next_idx])
+    brief.update({
+        "ok": True, "all_done": False,
+        "page_index": next_idx, "total_pages": len(pages),
+        "next_action": "Illustrate this page now: compose-prompt --page %s "
+                       "[--characters <names-on-this-page>] → generate → "
+                       "save-image → next. Do NOT pause for user confirmation "
+                       "during the auto loop." % brief["page_id"],
+    })
+    _emit(brief)
+
+
 def cmd_status(args):
     book_dir = Path(args.dir)
     if not _book_path(book_dir).is_file():
@@ -455,6 +521,15 @@ def build_parser():
     p.add_argument("--file", required=True, help="path of the generated image")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_save_image)
+
+    p = sub.add_parser("confirm-outline",
+                       help="User confirmed outline+cover → illustrating.")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_confirm_outline)
+
+    p = sub.add_parser("next", help="Advance illustration cursor.")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_next)
 
     p = sub.add_parser("save-outline", help="Persist the validated outline.")
     p.add_argument("--file", required=True, help="outline JSON path, or - for stdin")

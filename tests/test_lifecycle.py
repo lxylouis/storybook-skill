@@ -135,5 +135,39 @@ class TestComposePrompt(unittest.TestCase):
             self.assertLessEqual(out["prompt_len"], 500)
 
 
+class TestConfirmAndNext(unittest.TestCase):
+    def _confirmed(self, td):
+        d = helpers.make_book(td, phase="awaiting_outline_confirm")
+        data = helpers.read_book(d)
+        data["pages"][0]["image_file"] = "images/cover.png"
+        data["cover"]["image_file"] = "images/cover.png"
+        helpers.write_book(d, data)
+        (Path(d) / "images" / "cover.png").write_bytes(helpers.TINY_PNG)
+        return d
+
+    def test_confirm_starts_at_body_page_1(self):
+        with helpers.tmp() as td:
+            d = self._confirmed(td)
+            code, out, _ = helpers.run_cli("confirm-outline", "--dir", d)
+            self.assertEqual(code, 0)
+            data = helpers.read_book(d)
+            self.assertEqual(data["phase"], "illustrating")
+            self.assertEqual(data["current_page_index"], 1)
+            self.assertEqual(out["page_id"], "page-1")  # 直接给出第一页数据
+
+    def test_next_advances_and_finishes(self):
+        with helpers.tmp() as td:
+            d = self._confirmed(td)
+            helpers.run_cli("confirm-outline", "--dir", d)
+            code, out, _ = helpers.run_cli("next", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertFalse(out["all_done"])
+            self.assertEqual(out["page_id"], "page-2")
+            for _ in range(3):
+                code, out, _ = helpers.run_cli("next", "--dir", d)
+            self.assertTrue(out["all_done"])
+            self.assertIn("finalize", out["next_action"])
+
+
 if __name__ == "__main__":
     unittest.main()
