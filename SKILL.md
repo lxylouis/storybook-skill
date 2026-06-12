@@ -1,5 +1,5 @@
 ---
-name: storybook
+name: storybook-skill
 description: >
   Create illustrated children's picture books from a one-line idea — outline,
   style-consistent per-page illustrations, bilingual (zh/en) narration, and a

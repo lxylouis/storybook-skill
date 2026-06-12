@@ -292,7 +292,7 @@ class TestSkillPackage(unittest.TestCase):
         text = (root / "SKILL.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("---\n"))
         fm = text.split("---")[1]
-        self.assertIn("name: storybook", fm)
+        self.assertIn("name: storybook-skill", fm)
         self.assertIn("description:", fm)
         for ref in ("workflow.md", "prompts.md", "book-schema.md"):
             self.assertTrue((root / "references" / ref).is_file(), ref)
