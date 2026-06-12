@@ -297,6 +297,61 @@ def cmd_save_outline(args):
     })
 
 
+# Canonical consistency constraint string — ported verbatim from FDA
+# tools.py:251-254. Kept short to leave room for style_bible +
+# character_bible + image_prompt within the 500-char budget.
+CONSISTENCY_CONSTRAINTS = (
+    "Same character design and art style across all pages; "
+    "coherent lighting and palette; centered subject; no text or captions."
+)
+
+
+def cmd_compose_prompt(args):
+    data = _load_book(args.dir)
+    pid = (args.page or "").strip()
+    if pid == "cover":
+        _require_phase(data, "illustrating", "delivered", "awaiting_outline_confirm")
+    else:
+        _require_phase(data, "illustrating", "delivered")
+    style = (data.get("style_bible") or "").strip()
+    full_character = (data.get("character_bible") or "").strip()
+
+    # characters 是角色名过滤器:从 character_bible 里挑出对应角色的完整设定
+    # 条目。名字匹配不到(或没传)一律回退全量 bible——角色锚永远在场,防止
+    # "只传名字导致角色设定丢失→跨页漂移"。(移植 tools.py:298-311)
+    chars = full_character
+    requested = (args.characters or "").strip()
+    if requested and full_character:
+        entries = [e.strip() for e in re.split(r"[\n;；]+", full_character) if e.strip()]
+        names = [n.strip() for n in re.split(r"[,，、/|\s]+", requested) if n.strip()]
+        matched = [e for e in entries
+                   if any(n.lower() in e.lower() for n in names)]
+        if matched:
+            chars = "; ".join(matched)
+
+    page = _find_page(data, pid)
+    ipr = (page.get("image_prompt") or "").strip()
+    if not ipr:
+        _fail("image_prompt not found for page %r" % pid,
+              hint="available: %s" % [p.get("id") for p in data.get("pages", [])])
+
+    # Truncate each section to fit 500 chars (FDA budgets: 100/120/180).
+    style = style[:100].strip()
+    chars = chars[:120].strip()
+    ipr = ipr[:180].strip()
+    parts = [s for s in [style, chars, ipr, CONSISTENCY_CONSTRAINTS] if s]
+    prompt = "\n".join(parts)
+    if len(prompt) > 500:
+        prompt = prompt[:497].strip() + "..."
+    _emit({
+        "ok": True, "page_id": pid, "prompt": prompt, "prompt_len": len(prompt),
+        "next_action": "Generate ONE portrait (~2:3) image from this prompt — "
+                       "use the host's image tool if available, else "
+                       "scripts/gen_image.py. Do NOT modify the prompt. Then "
+                       "run save-image --page %s --file <generated>." % pid,
+    })
+
+
 def _find_page(data, page_id):
     for page in data.get("pages", []):
         if page.get("id") == page_id:
@@ -386,6 +441,14 @@ def build_parser():
     p.add_argument("--author", default="")
     p.add_argument("--dir", default=".", help="PARENT directory (init only).")
     p.set_defaults(func=cmd_init)
+
+    p = sub.add_parser("compose-prompt",
+                       help="Assemble the full image prompt for one page.")
+    p.add_argument("--page", required=True)
+    p.add_argument("--characters", default="",
+                   help="character NAMES on this page, comma-separated")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_compose_prompt)
 
     p = sub.add_parser("save-image", help="Register a generated image for a page.")
     p.add_argument("--page", required=True, help="cover | page-N")

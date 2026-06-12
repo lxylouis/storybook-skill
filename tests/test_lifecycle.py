@@ -90,5 +90,50 @@ class TestSaveImage(unittest.TestCase):
             self.assertEqual(helpers.read_book(d)["pages"][1]["failed_attempts"], 0)
 
 
+class TestComposePrompt(unittest.TestCase):
+    def test_cover_allowed_in_awaiting(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="awaiting_outline_confirm")
+            code, out, _ = helpers.run_cli("compose-prompt", "--page", "cover", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertLessEqual(out["prompt_len"], 500)
+            self.assertIn("no text or captions", out["prompt"])
+
+    def test_body_page_blocked_in_awaiting(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="awaiting_outline_confirm")
+            code, out, _ = helpers.run_cli("compose-prompt", "--page", "page-1", "--dir", d)
+            self.assertEqual(code, 2)
+
+    def test_characters_filter_injects_full_entry(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            code, out, _ = helpers.run_cli("compose-prompt", "--page", "page-1",
+                                           "--characters", "Little Fox", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertIn("red fur, amber eyes", out["prompt"])
+            self.assertNotIn("Moon Granny", out["prompt"])
+
+    def test_unmatched_names_fall_back_to_full_bible(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            code, out, _ = helpers.run_cli("compose-prompt", "--page", "page-1",
+                                           "--characters", "不存在的角色", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertIn("red fur, amber eyes", out["prompt"])
+
+    def test_truncation_keeps_total_under_500(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            data = helpers.read_book(d)
+            data["style_bible"] = "S" * 400
+            data["character_bible"] = "C" * 400
+            data["pages"][1]["image_prompt"] = "p" * 200
+            helpers.write_book(d, data)
+            code, out, _ = helpers.run_cli("compose-prompt", "--page", "page-1", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertLessEqual(out["prompt_len"], 500)
+
+
 if __name__ == "__main__":
     unittest.main()
