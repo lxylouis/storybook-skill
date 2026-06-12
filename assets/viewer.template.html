@@ -586,6 +586,55 @@ document.getElementById("langbtn").onclick = function () {
   renderPage(false);
 };
 
+/* ── 高质量语音选择 ────────────────────────────────────── */
+var _voiceCache = { zh: null, en: null, _loaded: false };
+// 按优先级排列的优质语音名(支持子串匹配)
+var _BEST_VOICES_ZH = ["Tingting", "Ting-Ting", "Sin-Ji", "Mei-Jia",
+  "Google 普通话", "Microsoft Huihui", "Microsoft Kangkang",
+  "HanHan", "Yafang"];  // macOS premium → Chrome → Windows → other
+var _BEST_VOICES_EN = ["Samantha", "Alex", "Ava", "Allison", "Susan",
+  "Google US English", "Microsoft Zira", "Microsoft David",
+  "Karen", "Moira", "Fiona", "Daniel"];
+
+function _pickVoice(langCode, prefs) {
+  var all = speechSynthesis.getVoices();
+  if (!all || !all.length) { return null; }
+  // 1. 精确匹配偏好列表
+  for (var pi = 0; pi < prefs.length; pi++) {
+    for (var vi = 0; vi < all.length; vi++) {
+      if (all[vi].lang.indexOf(langCode) === 0 &&
+          all[vi].name.indexOf(prefs[pi]) !== -1) {
+        return all[vi];
+      }
+    }
+  }
+  // 2. 任意同语言语音
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].lang.indexOf(langCode) === 0) { return all[i]; }
+  }
+  return null;
+}
+
+function _ensureVoices() {
+  if (_voiceCache._loaded) { return; }
+  var all = speechSynthesis.getVoices();
+  if (!all || !all.length) { return; }  // 还没加载完成,下次再说
+  _voiceCache.zh = _pickVoice("zh-CN", _BEST_VOICES_ZH);
+  _voiceCache.en = _pickVoice("en-US", _BEST_VOICES_EN);
+  _voiceCache._loaded = true;
+  console.log("storybook voices — zh:", _voiceCache.zh && _voiceCache.zh.name,
+              "| en:", _voiceCache.en && _voiceCache.en.name);
+}
+
+// Chrome 的 getVoices 是异步加载的,监听 onvoiceschanged
+if (window.speechSynthesis) {
+  speechSynthesis.onvoiceschanged = function () {
+    _voiceCache._loaded = false;
+    _ensureVoices();
+  };
+  _ensureVoices();
+}
+
 var speakBtn = document.getElementById("speakbtn");
 if (!window.speechSynthesis) {
   speakBtn.disabled = true; speakBtn.style.opacity = ".4";
@@ -599,6 +648,9 @@ if (!window.speechSynthesis) {
     speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(text);
     u.lang = state.lang === "zh" ? "zh-CN" : "en-US";
+    // 采用筛选出的优质语音
+    var v = state.lang === "zh" ? _voiceCache.zh : _voiceCache.en;
+    if (v) { u.voice = v; }
     u.rate = 0.92;
     u.onend = function () { setSpeaking(false); };
     u.onerror = function () { setSpeaking(false); };

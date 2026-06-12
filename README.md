@@ -60,6 +60,11 @@ python3 scripts/storybook.py save-outline --file outline.json --dir fox
 python3 scripts/storybook.py status --dir fox   # 任何时候看下一步
 ```
 
+> **大图提示**: `finalize` 默认将图片 base64 内嵌到 HTML 中(单文件自包含,方便分享)。
+> 当使用 2K 以上大尺寸图片时,单文件可能达到几十 MB。此时用
+> `export --link-images` 输出小体积 HTML(图片通过 `images/` 目录引用),
+> 分享时把整个书目录一起打包即可。
+
 ## 测试
 
 ```bash
