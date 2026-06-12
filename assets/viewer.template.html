@@ -5,73 +5,294 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
+  /* ═══════════════════════════════════════════════════════════════
+     Storybook Viewer — Design Tokens 「暖米纸 · 深棕 · 贴纸描边」
+     Fork 自 Storybook Redesign(sb-tokens.css);保持自包含/零 CDN。
+     ═══════════════════════════════════════════════════════════════ */
   :root {
-    --paper: #FAF0DC; --paper-deep: #F3E4C6; --paper-card: #FFFDF4;
-    --paper-halo: #FFF8E8; --ink: #59351A; --ink-soft: #7A5230;
-    --ink-faint: #AB8E6B; --coral: #EA9077; --coral-deep: #C96F58;
-    --mint: #A8DAC1; --sun: #F7C544; --sun-deep: #D9A02E; --sky: #62ACEE;
-    --font-title: "Comic Sans MS", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-    --font-ui: "Avenir Next", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    /* 纸张 */
+    --paper:       #FAF0DC;
+    --paper-deep:  #F3E4C6;
+    --paper-card:  #FFFDF4;
+    --paper-halo:  #FFF8E8;
+
+    /* 文字 */
+    --ink:        #59351A;
+    --ink-soft:   #7A5230;
+    --ink-faint:  #AB8E6B;
+    --line:       #DCBF96;
+
+    /* 糖果色 */
+    --coral:      #EA9077;  --coral-deep: #C96F58;
+    --mint:       #A8DAC1;  --mint-deep:  #7FBFA0;
+    --sun:        #F7C544;  --sun-deep:   #D9A02E;
+    --honey:      #F09B22;  --honey-deep: #C9780D;
+    --sky:        #62ACEE;  --sky-deep:   #3C88CC;
+    --lilac:      #C8B6E2;  --lilac-deep: #A78FC9;
+
+    /* 木质 */
+    --wood:       #8C5A33;
+    --wood-dark:  #6E4222;
+    --wood-light: #A9744A;
+    --wood-deep:  #59331A;
+
+    /* 字体 — 设计稿字栈 + 系统兜底,离线可渲染 */
+    --font-title: 'Baloo 2', 'ZCOOL KuaiLe', 'Comic Sans MS', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-ui:    'Fredoka', 'Avenir Next', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-story: 'Nunito', 'PingFang SC', system-ui, sans-serif;
+
+    --r-card: 26px;
+    --r-book: 22px;
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
   body {
-    background: radial-gradient(ellipse 120% 60% at 50% -10%, rgba(247,197,68,.07), transparent 60%), var(--paper);
-    color: var(--ink); font-family: var(--font-ui);
+    background:
+      radial-gradient(ellipse 120% 60% at 50% -10%, rgba(247,197,68,.07), transparent 60%),
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--font-ui);
     display: flex; flex-direction: column; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
   }
+  /* 纸张质感 — SVG noise 覆层(移植 sb-paper::after) */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  }
+  ::selection { background: rgba(247, 197, 68, .4); }
+
+  /* ── 顶栏 ─────────────────────────────────────────────── */
   header {
-    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-    flex-wrap: wrap;
+    position: relative; z-index: 2;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; flex-wrap: wrap;
+    background: var(--paper);
+    box-shadow: 0 2px 10px rgba(89,53,26,.1);
   }
-  header h1 { font-family: var(--font-title); font-size: 20px; flex: 1; min-width: 120px; }
+  header h1 {
+    font-family: var(--font-title); font-size: 20px; font-weight: 800;
+    flex: 1; min-width: 120px; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ── 贴纸描边胶囊(sticker) — 移植 sb-sticker ──────────── */
   .sticker {
-    border: 3px solid var(--ink); border-radius: 999px; padding: 6px 14px;
-    background: var(--paper-card); font-family: var(--font-title); font-weight: 700;
+    position: relative; z-index: 2;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; white-space: nowrap;
+    padding: 6px 14px; font-size: 14px;
+    font-family: var(--font-title); font-weight: 700;
+    background: var(--paper-card); color: var(--ink);
+    border: 3px solid var(--ink);
     box-shadow: 0 0 0 3px var(--paper-halo), 0 3px 10px rgba(89,53,26,.18);
-    cursor: pointer; user-select: none; font-size: 14px; color: var(--ink);
+    cursor: pointer; user-select: none;
+    transition: transform .15s ease, box-shadow .15s ease;
   }
+  .sticker:hover { transform: translateY(-1px) scale(1.02); }
   .sticker:active { transform: translateY(1px) scale(.98); }
   .sticker.on { background: var(--sun); }
-  main { flex: 1; display: flex; align-items: stretch; min-height: 0; padding: 0 8px 8px; gap: 6px; }
+
+  /* ── 糖果圆形翻页钮 — 移植 sb-pagebtn ────────────────── */
   .pagebtn {
-    align-self: center; width: 52px; height: 52px; border-radius: 50%;
-    border: 3px solid var(--ink); background: var(--coral); color: #fff;
-    font-size: 22px; cursor: pointer; flex: none;
+    position: relative; z-index: 2;
+    align-self: center; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--coral); color: #fff;
+    font-size: 24px; font-weight: 700;
+    cursor: pointer; user-select: none;
+    border: 3px solid var(--ink);
     box-shadow: 0 0 0 3px var(--paper-halo), 0 4px 12px rgba(89,53,26,.22);
+    transition: transform .15s ease, opacity .2s ease;
   }
-  .pagebtn:disabled { opacity: .25; cursor: default; }
+  .pagebtn:hover { transform: scale(1.08); }
+  .pagebtn:active { transform: scale(.94); }
+  .pagebtn:disabled { opacity: 0; pointer-events: none; }
+
+  /* ── 主区域 ───────────────────────────────────────────── */
+  main {
+    position: relative; z-index: 1;
+    flex: 1; display: flex; align-items: stretch;
+    min-height: 0; padding: 0 8px 8px; gap: 6px;
+  }
+
+  /* ── 舞台卡片 ─────────────────────────────────────────── */
   #stage {
     flex: 1; display: flex; flex-direction: column; min-width: 0;
-    background: var(--paper-card); border: 3px solid var(--ink);
-    border-radius: 22px; overflow: hidden;
-    box-shadow: 0 6px 24px rgba(89,53,26,.18);
+    background: var(--paper-card);
+    border: 3px solid rgba(89,53,26,.25);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    box-shadow: 0 0 0 3px rgba(255,248,232,.8), 0 8px 28px rgba(89,53,26,.18);
   }
+
+  /* ── 插画区 + 艺术辉光(art-glow) ─────────────────────── */
   #pic {
-    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    flex: 1; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
     background: var(--paper-deep);
+    /* 金色辉光内框 — 移植 sb-art-glow */
+    box-shadow: inset 0 0 0 4px #F2DFA8, inset 0 0 24px 6px rgba(247,197,68,.5);
   }
-  #pic img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  #pic img {
+    max-width: 100%; max-height: 100%; object-fit: contain;
+  }
   #pic .placeholder {
     font-size: 48px; text-align: center; color: var(--ink-faint);
     font-family: var(--font-title); padding: 40px;
   }
-  #pic .placeholder small { display: block; font-size: 14px; margin-top: 12px; }
-  #text { padding: 14px 20px 18px; border-top: 3px dashed var(--paper-deep); }
-  #pagetitle { font-family: var(--font-title); font-size: 17px; color: var(--ink-soft); margin-bottom: 6px; }
-  #narration { font-size: 17px; line-height: 1.65; white-space: pre-wrap; }
-  #covertitle { font-family: var(--font-title); font-size: 30px; }
-  #coverauthor { color: var(--ink-soft); margin-top: 4px; }
-  footer { text-align: center; padding: 6px; color: var(--ink-faint); font-size: 13px; }
+  #pic .placeholder small {
+    display: block; font-size: 14px; margin-top: 12px; color: var(--ink-faint);
+  }
+
+  /* ── 文字区 ───────────────────────────────────────────── */
+  #text {
+    padding: 16px 20px 18px;
+    border-top: 3px dashed var(--paper-deep);
+  }
+  #pagetitle {
+    font-family: var(--font-title); font-size: 17px;
+    color: var(--ink-soft); margin-bottom: 6px; font-weight: 700;
+  }
+  #narration {
+    font-family: var(--font-story); font-size: 17px;
+    line-height: 1.75; white-space: pre-wrap; font-weight: 700;
+    color: var(--ink); text-wrap: pretty;
+  }
+
+  /* ── 封面页特殊样式 ───────────────────────────────────── */
+  #covertitle {
+    font-family: var(--font-title); font-weight: 800;
+    font-size: 30px; line-height: 1.25; color: var(--ink);
+    /* 彩虹 halo 字影(轻量版,不使用逐字染色以保持简洁) */
+    text-shadow:
+      -1.5px -1.5px 0 var(--paper-halo), 1.5px -1.5px 0 var(--paper-halo),
+      -1.5px 1.5px 0 var(--paper-halo), 1.5px 1.5px 0 var(--paper-halo),
+      0 4px 6px rgba(89,53,26,.2);
+  }
+  #coverauthor {
+    color: var(--ink-soft); margin-top: 6px;
+    font-family: var(--font-story); font-size: 16px;
+  }
+
+  /* ── 页码指示器 ───────────────────────────────────────── */
+  footer {
+    position: relative; z-index: 2;
+    text-align: center; padding: 4px;
+    color: var(--ink-faint); font-size: 13px; font-weight: 600;
+  }
+
+  /* ── 打印区(隐藏,仅 @media print 时展示) ─────────────── */
   #printpages { display: none; }
   @media print {
     body > header, body > main, body > footer { display: none; }
     body { overflow: visible; background: #fff; }
+    body::after { display: none; }
     #printpages { display: block; }
     .print-page { page-break-after: always; text-align: center; padding: 24px; }
     .print-page img { max-width: 100%; max-height: 70vh; }
-    .print-page .pp-title { font-family: var(--font-title); font-size: 20px; margin: 12px 0 6px; }
-    .print-page .pp-text { font-size: 14px; line-height: 1.6; text-align: left; white-space: pre-wrap; }
+    .print-page .pp-title {
+      font-family: var(--font-title); font-size: 20px; margin: 12px 0 6px;
+    }
+    .print-page .pp-text {
+      font-size: 14px; line-height: 1.6; text-align: left; white-space: pre-wrap;
+    }
+  }
+
+  /* ── 朗读脉冲动画 — 移植 sb-pulse ────────────────────── */
+  @keyframes sb-pulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.15); }
+  }
+  .speaking .sticker-onair {
+    animation: sb-pulse .8s ease-in-out infinite;
+    display: inline-block;
+  }
+
+  /* ── 翻页淡入动画 — 移植 sb-page-anim ───────────────── */
+  @keyframes sb-page-in {
+    from { opacity: 0; transform: translateX(14px) scale(.99); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+  }
+  @keyframes sb-page-in-rev {
+    from { opacity: 0; transform: translateX(-14px) scale(.99); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+  }
+  #pic.anim-next  img, #pic.anim-next  .placeholder { animation: sb-page-in .32s cubic-bezier(.22,1,.36,1); }
+  #pic.anim-prev  img, #pic.anim-prev  .placeholder { animation: sb-page-in-rev .32s cubic-bezier(.22,1,.36,1); }
+  #text.anim-next  { animation: sb-page-in .28s cubic-bezier(.22,1,.36,1); }
+  #text.anim-prev  { animation: sb-page-in-rev .28s cubic-bezier(.22,1,.36,1); }
+  @media (prefers-reduced-motion: reduce) {
+    #pic.anim-next img, #pic.anim-next .placeholder,
+    #pic.anim-prev img, #pic.anim-prev .placeholder,
+    #text.anim-next, #text.anim-prev { animation: none; }
+    .speaking .sticker-onair { animation: none; }
+  }
+
+  /* ── 窄屏(< 820px):垂直堆叠(原移动端布局) ──────────── */
+  /* ── 宽屏(≥ 820px):摊开书——插画左页 + 文字右页 ─────── */
+  @media (min-width: 820px) {
+    main { padding: 0 12px 12px; gap: 0; }
+    #stage {
+      flex-direction: row;
+      border-radius: 16px;
+      /* 书皮质感:渐变米纸 + 棕色书脊边框(移植 sb-openbook) */
+      background: linear-gradient(90deg, #F4E8CF 0%, #FBF3DF 46%, #E8D8B8 50%, #FBF3DF 54%, #F4E8CF 100%);
+      border: none;
+      box-shadow:
+        0 0 0 8px #8A4F26, 0 0 0 10px #6E3D1C,
+        0 24px 48px rgba(0,0,0,.45);
+    }
+    #pic {
+      flex: 1; min-width: 0;
+      border-radius: 12px 0 0 12px;
+      box-shadow: none;
+      /* 反色木纹桌布背景(摊开的书放在木桌上) */
+    }
+    /* 桌面背景 — body 在宽屏时加木桌纹理 */
+    body {
+      background:
+        radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255,226,158,.14), transparent 70%),
+        repeating-linear-gradient(92deg, rgba(0,0,0,.05) 0 3px, transparent 3px 60px),
+        linear-gradient(180deg, #7A4A26, #5E3517);
+    }
+    body::after {
+      /* 宽屏保留纸张噪点但减淡,避免遮住木桌纹理 */
+      opacity: .6;
+    }
+    #pic img, #pic .placeholder {
+      /* 插画本身保持原有渲染 */
+    }
+    /* 书缝(左右页之间) */
+    #text {
+      flex: 1; min-width: 0;
+      border-top: none;
+      border-left: none;
+      padding: clamp(24px, 4vh, 44px) clamp(24px, 3vw, 46px) clamp(18px, 3vh, 30px) 26px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      /* 微妙渐变书缝投影 */
+      background: linear-gradient(90deg, rgba(89,53,26,.12) 0%, rgba(89,53,26,.02) 8%, transparent 100%);
+    }
+    #pagetitle { font-size: 19px; }
+    #narration { font-size: 19px; }
+    #covertitle { font-size: 36px; }
+    #coverauthor { font-size: 18px; }
+    /* 页码悬浮徽章(宽屏) */
+    footer {
+      position: absolute; right: 20px; bottom: 12px;
+      background: rgba(255,253,244,.85); border-radius: 999px;
+      padding: 3px 14px; font-size: 12px; z-index: 3;
+    }
+  }
+
+  /* ── 超宽屏(≥ 1200px)微调阅读舒适度 ─────────────────── */
+  @media (min-width: 1200px) {
+    #stage { max-width: 1240px; margin: 0 auto; }
+    #pagetitle { font-size: 22px; }
+    #narration { font-size: 22px; }
+    #covertitle { font-size: 44px; }
   }
 </style>
 </head>
@@ -80,8 +301,8 @@
 <header>
   <h1 id="booktitle"></h1>
   <button class="sticker" id="langbtn" title="切换语言 / language">中 / EN</button>
-  <button class="sticker" id="speakbtn" title="朗读本页">🔊 读给我听</button>
-  <button class="sticker" onclick="window.print()" title="打印或另存为 PDF">🖨️ 打印</button>
+  <button class="sticker" id="speakbtn" title="朗读本页"><span>🔊</span> <span class="btn-label">读给我听</span></button>
+  <button class="sticker" onclick="window.print()" title="打印或另存为 PDF">🖨️ <span class="btn-label">打印</span></button>
 </header>
 <main>
   <button class="pagebtn" id="prevbtn">‹</button>
@@ -99,7 +320,7 @@
 <script>
 "use strict";
 var BOOK = JSON.parse(document.getElementById("book-data").textContent);
-var state = { i: 0, lang: "zh" };
+var state = { i: 0, lang: "zh", dir: "next" };
 var PLACEHOLDER = '<div class="placeholder">🎨<small>这一页的插画休息啦<br>This page\'s picture is resting</small></div>';
 
 function t(pair, lang) { return (pair && (pair[lang] || pair.zh || pair.en)) || ""; }
@@ -109,44 +330,75 @@ function pageImage(p) {
   return '<img alt="illustration" src="' + p.image + '">';
 }
 
+/* ── 自适应字号(移植设计稿 autoFontSize) ────────────── */
+function autoFontSize(text, lang, base) {
+  var len = lang === "zh" ? text.length : Math.ceil(text.length / 2.2);
+  var f = len <= 70 ? 1 : len <= 110 ? 0.86 : len <= 160 ? 0.76 : 0.68;
+  return Math.max(17, Math.round(base * f));
+}
+
 function render() {
   var p = BOOK.pages[state.i];
   var lang = state.lang;
   document.documentElement.lang = lang === "zh" ? "zh" : "en";
   document.title = t(BOOK.title, lang);
   document.getElementById("booktitle").textContent = t(BOOK.title, lang);
-  document.getElementById("pic").innerHTML = pageImage(p);
+
+  /* 翻页动画:在 #pic 和 #text 上加 anim-next / anim-prev */
+  var picEl = document.getElementById("pic");
+  var textEl = document.getElementById("text");
+  picEl.classList.remove("anim-next", "anim-prev");
+  textEl.classList.remove("anim-next", "anim-prev");
+  /* 强制回流以便重新触发动画 */
+  void picEl.offsetWidth;
+  var animClass = state.dir === "next" ? "anim-next" : "anim-prev";
+  picEl.classList.add(animClass);
+  textEl.classList.add(animClass);
+
+  picEl.innerHTML = pageImage(p);
   var isCover = p.page_no === 0;
   var titleEl = document.getElementById("pagetitle");
   var narEl = document.getElementById("narration");
+
   if (isCover) {
     titleEl.innerHTML = '<div id="covertitle">' + t(BOOK.title, lang) +
       '</div><div id="coverauthor">' + (BOOK.author || "") + "</div>";
     narEl.textContent = "";
+    /* 封面页不设自适应字号 */
+    narEl.style.fontSize = "";
   } else {
     titleEl.textContent = t(p.page_title, lang);
-    narEl.textContent = t(p.narration, lang);
+    var narText = t(p.narration, lang);
+    narEl.textContent = narText;
+    /* 自适应字号:按 base 在窄屏 17 / 宽屏 19 / 超宽 22 */
+    var base = window.innerWidth >= 1200 ? 22 : window.innerWidth >= 820 ? 19 : 17;
+    narEl.style.fontSize = autoFontSize(narText, lang, base) + "px";
   }
+
   document.getElementById("prevbtn").disabled = state.i === 0;
   document.getElementById("nextbtn").disabled = state.i === BOOK.pages.length - 1;
   document.getElementById("pageno").textContent =
-    (state.i + 1) + " / " + BOOK.pages.length + (isCover ? (lang === "zh" ? "(封面)" : " (cover)") : "");
+    (state.i + 1) + " / " + BOOK.pages.length + (isCover ? (lang === "zh" ? " (封面)" : " (cover)") : "");
   if (window.speechSynthesis) { speechSynthesis.cancel(); }
 }
 
 function go(delta) {
   var n = state.i + delta;
   if (n < 0 || n >= BOOK.pages.length) { return; }
+  state.dir = delta > 0 ? "next" : "prev";
   state.i = n; render();
 }
 
 document.getElementById("prevbtn").onclick = function () { go(-1); };
 document.getElementById("nextbtn").onclick = function () { go(1); };
 document.getElementById("langbtn").onclick = function () {
-  state.lang = state.lang === "zh" ? "en" : "zh"; render();
+  state.lang = state.lang === "zh" ? "en" : "zh";
+  state.dir = "next";  /* 语言切换不用逆向动画 */
+  render();
 };
 
 var speakBtn = document.getElementById("speakbtn");
+var speakIcon = speakBtn.querySelector("span");
 if (!window.speechSynthesis) {
   speakBtn.disabled = true; speakBtn.style.opacity = ".4";
   speakBtn.title = "此浏览器不支持语音合成";
@@ -155,9 +407,20 @@ if (!window.speechSynthesis) {
     var p = BOOK.pages[state.i];
     var text = p.page_no === 0 ? t(BOOK.title, state.lang) : t(p.narration, state.lang);
     if (!text) { return; }
+    /* 如果正在朗读则停止;否则开始 */
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      speechSynthesis.cancel();
+      document.body.classList.remove("speaking");
+      return;
+    }
     speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(text);
     u.lang = state.lang === "zh" ? "zh-CN" : "en-US";
+    u.rate = 0.92;
+    u.onend = function () { document.body.classList.remove("speaking"); };
+    u.onerror = function () { document.body.classList.remove("speaking"); };
+    document.body.classList.add("speaking");
+    if (speakIcon) { speakIcon.classList.add("sticker-onair"); }
     speechSynthesis.speak(u);
   };
 }
