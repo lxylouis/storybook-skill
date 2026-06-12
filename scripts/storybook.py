@@ -297,6 +297,65 @@ def cmd_save_outline(args):
     })
 
 
+def _find_page(data, page_id):
+    for page in data.get("pages", []):
+        if page.get("id") == page_id:
+            return page
+    _fail("page_id %r not found" % page_id,
+          hint="available: %s" % [p.get("id") for p in data.get("pages", [])])
+
+
+def cmd_save_image(args):
+    data = _load_book(args.dir)
+    pid = (args.page or "").strip()
+    # Cover exception ported from FDA: the outline turn saves the cover
+    # right after save-outline advanced phase to awaiting_outline_confirm.
+    if pid == "cover":
+        _require_phase(data, "illustrating", "delivered", "awaiting_outline_confirm")
+    else:
+        _require_phase(data, "illustrating", "delivered")
+    src = Path(args.file)
+    if not src.is_file():
+        _fail("image file %r not found" % str(src),
+              hint="Generate the image first (host image tool or "
+                   "scripts/gen_image.py), then pass its path here.")
+    ext = src.suffix.lower()
+    if ext not in IMAGE_EXTS:
+        _fail("unsupported image extension %r" % ext,
+              hint="Use one of: png, jpg, jpeg, webp.")
+    page = _find_page(data, pid)
+    if pid == "cover":
+        dest_name = "cover" + ext
+    else:
+        dest_name = "page-%02d%s" % (int(page.get("page_no", 0)), ext)
+    dest = Path(args.dir) / "images" / dest_name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
+    rel = "images/" + dest_name
+    page["image_file"] = rel
+    page["failed_attempts"] = 0
+    if data["pages"] and data["pages"][0].get("id") == pid:
+        data.setdefault("cover", {})["image_file"] = rel
+    remaining = sum(1 for p in data["pages"] if not (p.get("image_file") or "").strip())
+    _write_book(args.dir, data)
+    result = {"ok": True, "page_id": pid, "image_file": rel, "remaining": remaining}
+    phase_now = data.get("phase")
+    if remaining > 0 and phase_now == "illustrating":
+        result["next_action"] = ("%d pages still need images. Report one-line "
+                                 "progress to the user, then run `next` to get "
+                                 "the next page and keep the auto loop going."
+                                 % remaining)
+    elif phase_now == "delivered":
+        result["next_action"] = "Page image updated. Re-run `export` to refresh the HTML."
+    elif phase_now == "awaiting_outline_confirm":
+        result["next_action"] = ("Cover saved. Show the user the outline + cover "
+                                 "and WAIT for explicit confirmation, then run "
+                                 "confirm-outline.")
+    else:
+        result["next_action"] = "All pages have images. Run `finalize`."
+    _emit(result)
+
+
 def cmd_status(args):
     book_dir = Path(args.dir)
     if not _book_path(book_dir).is_file():
@@ -327,6 +386,12 @@ def build_parser():
     p.add_argument("--author", default="")
     p.add_argument("--dir", default=".", help="PARENT directory (init only).")
     p.set_defaults(func=cmd_init)
+
+    p = sub.add_parser("save-image", help="Register a generated image for a page.")
+    p.add_argument("--page", required=True, help="cover | page-N")
+    p.add_argument("--file", required=True, help="path of the generated image")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_save_image)
 
     p = sub.add_parser("save-outline", help="Persist the validated outline.")
     p.add_argument("--file", required=True, help="outline JSON path, or - for stdin")

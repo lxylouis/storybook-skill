@@ -133,3 +133,37 @@ class TestSaveOutlineValidation(unittest.TestCase):
             data = helpers.read_book(d)
             self.assertEqual(data["pages"][0]["image_file"], "images/cover.png")
             self.assertEqual(data["cover"]["image_file"], "images/cover.png")
+
+
+class TestSaveImageGuards(unittest.TestCase):
+    def test_body_page_locked_in_awaiting(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="awaiting_outline_confirm")
+            src = Path(td) / "x.png"
+            src.write_bytes(helpers.TINY_PNG)
+            code, out, _ = helpers.run_cli("save-image", "--page", "page-1",
+                                           "--file", src, "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("awaiting_outline_confirm", out["hint"])
+            self.assertIn("confirm-outline", out["hint"])
+            self.assertEqual(helpers.read_book(d)["pages"][1]["image_file"], "")
+
+    def test_unknown_page_404_lists_available(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            src = Path(td) / "x.png"
+            src.write_bytes(helpers.TINY_PNG)
+            code, out, _ = helpers.run_cli("save-image", "--page", "page-99",
+                                           "--file", src, "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("page-1", out["hint"])
+
+    def test_bad_extension_rejected(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            src = Path(td) / "x.gif"
+            src.write_bytes(b"GIF89a")
+            code, out, _ = helpers.run_cli("save-image", "--page", "page-1",
+                                           "--file", src, "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("png", out["hint"])
