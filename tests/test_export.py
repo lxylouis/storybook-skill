@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -47,3 +48,67 @@ class TestExport(unittest.TestCase):
             d = helpers.make_book(td, phase="outlining")
             code, _, _ = helpers.run_cli("export", "--dir", d)
             self.assertEqual(code, 2)
+
+
+class TestExportSecurity(unittest.TestCase):
+    """XSS hardening for the self-contained, shared-around HTML (C1 + I3)."""
+
+    def test_outline_rejects_malicious_image_file(self):
+        # C1 entry guard: a crafted image_file can't survive save-outline,
+        # so the amend-outline round-trip can't smuggle it into book.json.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="outlining")
+            outline = helpers.base_book(phase="outlining")
+            outline["pages"][1]["image_file"] = 'images/x.png" onerror="alert(1)'
+            f = Path(td) / "outline.json"
+            f.write_text(json.dumps(outline, ensure_ascii=False), encoding="utf-8")
+            code, out, _ = helpers.run_cli("save-outline", "--file", str(f), "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("image_file", out.get("error", ""))
+
+    def test_outline_accepts_clean_image_file(self):
+        # Guard must not reject what save-image legitimately writes.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="outlining")
+            outline = helpers.base_book(phase="outlining")
+            outline["pages"][1]["image_file"] = "images/page-01.png"
+            f = Path(td) / "outline.json"
+            f.write_text(json.dumps(outline, ensure_ascii=False), encoding="utf-8")
+            code, out, _ = helpers.run_cli("save-outline", "--file", str(f), "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(helpers.read_book(d)["pages"][1]["image_file"],
+                             "images/page-01.png")
+
+    def test_viewer_sink_escapes_image_src(self):
+        # C1 sink fix: pageImage must run p.image through esc(), so even a
+        # malicious value already in book.json can't break out of <img src>.
+        template = (helpers.ROOT / "assets" / "viewer.template.html").read_text(
+            encoding="utf-8")
+        self.assertIn("esc(p.image)", template)
+        self.assertNotIn("' + p.image + '", template)  # raw concat is gone
+
+    def test_title_xss_is_escaped(self):
+        # I3: title.zh must not be able to break out of <title>.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            data = helpers.read_book(d)
+            data["title"]["zh"] = "</title><script>alert(1)</script>"
+            helpers.write_book(d, data)
+            code, out, _ = helpers.run_cli("export", "--dir", d)
+            self.assertEqual(code, 0)
+            html = Path(out["html"]).read_text(encoding="utf-8")
+            self.assertNotIn("</title><script>", html)
+            self.assertIn("&lt;/title&gt;", html)
+
+    def test_title_with_book_json_placeholder_not_clobbered(self):
+        # I3: single-pass replace — a title literally equal to __BOOK_JSON__
+        # must stay in <title>, not pull the whole book JSON into it.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            data = helpers.read_book(d)
+            data["title"]["zh"] = "__BOOK_JSON__"
+            helpers.write_book(d, data)
+            code, out, _ = helpers.run_cli("export", "--dir", d)
+            self.assertEqual(code, 0)
+            html = Path(out["html"]).read_text(encoding="utf-8")
+            self.assertIn("<title>__BOOK_JSON__</title>", html)

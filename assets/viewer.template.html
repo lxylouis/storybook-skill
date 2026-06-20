@@ -438,7 +438,7 @@ function buildDoodles() {
 
 function pageImage(p) {
   if (!p.image || p.image === "") { return PLACEHOLDER; }
-  return '<img alt="illustration" src="' + p.image + '">';
+  return '<img alt="illustration" src="' + esc(p.image) + '">';
 }
 
 /* ── 自动字号(设计稿 autoFontSize:越长越小,最小 17px;滚动兜底) ── */

@@ -13,6 +13,7 @@ Python 3.9 compatible, stdlib only.
 from __future__ import annotations
 
 import argparse
+import html as _html
 import json
 import re
 import shutil
@@ -24,6 +25,11 @@ from pathlib import Path
 PHASES = ["outlining", "awaiting_outline_confirm", "illustrating", "delivered"]
 SKIP_SENTINEL = "skipped"
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+# image_file must be a relative path under images/ (exactly what save-image
+# writes), the skip sentinel, or empty — never free text. Blocks stored-XSS
+# via a crafted outline image_file like 'images/x.png" onerror=alert(1)' that
+# would otherwise survive the amend-outline round-trip into the <img src>.
+_IMAGE_FILE_RE = re.compile(r"^images/[\w.\-]+$")
 
 # Commands that move the flow forward from each phase (code truth for guard
 # hints — ported from FDA tools.py _PHASE_NEXT_TOOLS).
@@ -165,6 +171,21 @@ def cmd_init(args):
 
 # ── outline validation (ported from FDA save_outline, tools.py:530-610) ──
 
+def _clean_image_file(val, page_idx):
+    """Accept only what save-image writes (images/<name>), the skip sentinel,
+    or empty. Anything else is rejected so a hand-crafted outline can't smuggle
+    an XSS payload through image_file into the exported <img src>."""
+    val = (val or "").strip()
+    if val in ("", SKIP_SENTINEL):
+        return val
+    if not _IMAGE_FILE_RE.match(val):
+        _fail("pages[%d].image_file %r is not allowed" % (page_idx, val),
+              hint="image_file must be a relative path like images/page-01.png "
+                   "(letters/digits/dot/dash only), empty, or \"skipped\". It "
+                   "is set by save-image — don't hand-write it into the outline.")
+    return val
+
+
 def _validate_outline_input(payload):
     """Validate save-outline input; return normalized (meta, pages).
 
@@ -249,7 +270,7 @@ def _validate_outline_input(payload):
             "narration": {"zh": nar.get("zh", "").strip(),
                           "en": nar.get("en", "").strip()},
             "image_prompt": ipr,
-            "image_file": (p.get("image_file") or "").strip(),
+            "image_file": _clean_image_file(p.get("image_file"), i),
             "failed_attempts": int(p.get("failed_attempts", 0) or 0),
         })
     meta = {
@@ -641,7 +662,12 @@ def _do_export(book_dir, data, inline):
     title_zh = (data.get("title", {}) or {}).get("zh", "") or "storybook"
     # </script> guard: keep the embedded JSON from terminating its own tag.
     book_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
-    html = html.replace("__TITLE__", title_zh).replace("__BOOK_JSON__", book_json)
+    # Single pass over both placeholders: an inserted value is never re-scanned,
+    # so a title containing "__BOOK_JSON__" can't pull the JSON into <title>, and
+    # the escaped title can't break out of the tag. The function form of re.sub
+    # leaves backslashes in book_json (the <\/ guard) untouched.
+    repl = {"__TITLE__": _html.escape(title_zh), "__BOOK_JSON__": book_json}
+    html = re.sub("__TITLE__|__BOOK_JSON__", lambda m: repl[m.group()], html)
     slug = Path(book_dir).resolve().name
     out_path = Path(book_dir) / ("%s.html" % slug)
     tmp = out_path.with_suffix(".html.tmp")
