@@ -96,6 +96,34 @@ class TestGenImageDashScope(unittest.TestCase):
             self.assertIn("empty", out["error"])
             self.assertFalse(out_png.exists())
 
+    def test_size_normalization_variants(self):
+        # P2: every accepted spelling maps to DashScope's W×H (or a preset),
+        # and a non-WxH string falls through untouched for the API to judge.
+        cases = [("1024x1536", "1024×1536"), ("1024×1536", "1024×1536"),
+                 ("1024*1536", "1024×1536"), ("1024X1536", "1024×1536"),
+                 ("2K", "2K"), ("portrait", "portrait")]
+        for given, want in cases:
+            with helpers.tmp() as td, helpers.FakeDashScopeAPI() as api:
+                out_png = Path(td) / "o.png"
+                code, out, _ = helpers.run_gen_ds(
+                    "--prompt", "a fox", "--out", out_png, "--size", given,
+                    env_extra={"STORYBOOK_IMAGE_API_KEY": "k",
+                               "STORYBOOK_IMAGE_BASE_URL": api.base_url})
+                self.assertEqual(code, 0, "%s: %s" % (given, out))
+                self.assertEqual(out["size"], want, "size %r" % given)
+
+    def test_prompt_file_stdin(self):
+        # P2: the `--prompt-file -` stdin path (had no coverage on this side).
+        with helpers.tmp() as td, helpers.FakeDashScopeAPI() as api:
+            out_png = Path(td) / "o.png"
+            code, out, _ = helpers.run_gen_ds(
+                "--prompt-file", "-", "--out", out_png,
+                env_extra={"STORYBOOK_IMAGE_API_KEY": "k",
+                           "STORYBOOK_IMAGE_BASE_URL": api.base_url},
+                stdin="a fox under the moon")
+            self.assertEqual(code, 0)
+            self.assertEqual(out_png.read_bytes(), helpers.TINY_PNG)
+
 
 if __name__ == "__main__":
     unittest.main()

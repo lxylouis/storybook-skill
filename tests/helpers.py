@@ -187,14 +187,14 @@ class FakeImageAPI:
         self.server.server_close()
 
 
-def run_gen(*args, env_extra=None, cwd=None):
+def run_gen(*args, env_extra=None, cwd=None, stdin=None):
     env = dict(os.environ)
     env.pop("STORYBOOK_IMAGE_API_KEY", None)  # isolate from real env
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
         [sys.executable, str(GEN_SCRIPT), *[str(a) for a in args]],
-        capture_output=True, text=True, cwd=str(cwd or ROOT), env=env,
+        capture_output=True, text=True, cwd=str(cwd or ROOT), env=env, input=stdin,
     )
     payload = {}
     if proc.stdout.strip():
@@ -273,14 +273,14 @@ class FakeDashScopeAPI:
         self.server.server_close()
 
 
-def run_gen_ds(*args, env_extra=None, cwd=None):
+def run_gen_ds(*args, env_extra=None, cwd=None, stdin=None):
     env = dict(os.environ)
     env.pop("STORYBOOK_IMAGE_API_KEY", None)  # isolate from real env
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
         [sys.executable, str(GEN_DS_SCRIPT), *[str(a) for a in args]],
-        capture_output=True, text=True, cwd=str(cwd or ROOT), env=env,
+        capture_output=True, text=True, cwd=str(cwd or ROOT), env=env, input=stdin,
     )
     payload = {}
     if proc.stdout.strip():

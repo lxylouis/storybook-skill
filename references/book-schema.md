@@ -52,6 +52,8 @@
 
 - id 不用传(CLI 分配);amend 重交时**可带 `image_file`** 保住已生成的图。
 - 5-12 页**含封面**;page_no 必须等于数组下标。
+- `amend-page` 对 `narration` / `page_title` 是**按语言浅合并**:只传 `{"zh": ...}`
+  会保留原有的 `en`(反之亦然),方便单语言改字;但合并后两种语言仍须都非空。
 
 ## 校验红线(save-outline / amend-page 会拦)
 

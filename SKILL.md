@@ -42,7 +42,7 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
 | `regenerate --page <id>` | 清图待重出(自动记失败次数) |
 | `skip --page <id> [--reason ...]` | 跳过反复失败的页 |
 | `finalize` | 校验全书 → delivered → 自动导出 HTML |
-| `export [--link-images]` | (重新)导出 HTML。大图(2K 以上)建议加 `--link-images` 避免单文件几十 MB |
+| `export [--link-images]` | (重新)导出 HTML;交付前(`awaiting_outline_confirm`/`illustrating`)也可随时跑来**预览**。大图(2K 以上)建议加 `--link-images` 避免单文件几十 MB |
 | `doctor` | 环境自检(python/出图配置/模板) |
 
 ## 流程总图

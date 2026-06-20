@@ -387,11 +387,14 @@ function renderTitle() {
   var chars = Array.from(text);
   for (var i = 0; i < chars.length; i++) {
     var c = chars[i] === " " ? "&nbsp;" : esc(chars[i]);
-    html += '<span class="rl" style="color:' + RAINBOW[i % RAINBOW.length] +
+    // aria-hidden so screen readers don't spell the title out letter-by-letter;
+    // the whole title is exposed once via the container's aria-label below.
+    html += '<span class="rl" aria-hidden="true" style="color:' + RAINBOW[i % RAINBOW.length] +
       ';transform:rotate(' + (i % 2 === 0 ? -2 : 2) + 'deg) translateY(' + (i % 3 === 1 ? -2 : 0) + 'px)">' + c + "</span>";
   }
   var el = document.getElementById("booktitle");
   el.innerHTML = html;
+  el.setAttribute("aria-label", text);
   /* 标题自适应:放不下先逐档缩字号(下限 16px),仍不够才走 CSS 省略号 */
   var size = mqDesktop.matches ? 26 : 24;
   el.style.fontSize = size + "px";
@@ -438,7 +441,10 @@ function buildDoodles() {
 
 function pageImage(p) {
   if (!p.image || p.image === "") { return PLACEHOLDER; }
-  return '<img alt="illustration" src="' + esc(p.image) + '">';
+  // Meaningful alt for screen readers: this page's title, or the book title
+  // for the cover (whose page_title is empty) — never a bare "illustration".
+  var alt = t(p.page_title, state.lang) || t(BOOK.title, state.lang);
+  return '<img alt="' + esc(alt) + '" src="' + esc(p.image) + '">';
 }
 
 /* ── 自动字号(设计稿 autoFontSize:越长越小,最小 17px;滚动兜底) ── */

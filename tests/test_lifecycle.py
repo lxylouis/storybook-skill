@@ -223,6 +223,20 @@ class TestAmendRegenerateSkip(unittest.TestCase):
             self.assertEqual(data["pages"][2]["image_file"], "images/page-02.png")
             self.assertNotIn("regenerate", out["next_action"])  # 只改文不触发重出图
 
+    def test_amend_page_single_language_merge(self):
+        # P2: amend-page shallow-merges per language — passing only zh must
+        # keep the existing en, not blank it (documented in book-schema.md).
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            before_en = helpers.read_book(d)["pages"][2]["narration"]["en"]
+            code, _, _ = helpers.run_cli(
+                "amend-page", "--page", "page-2", "--json",
+                '{"narration": {"zh": "只改中文这一句。"}}', "--dir", d)
+            self.assertEqual(code, 0)
+            nar = helpers.read_book(d)["pages"][2]["narration"]
+            self.assertEqual(nar["zh"], "只改中文这一句。")
+            self.assertEqual(nar["en"], before_en)  # en preserved
+
     def test_amend_page_image_prompt_hints_regenerate(self):
         with helpers.tmp() as td:
             d = helpers.make_book(td, phase="delivered", with_images=True)
@@ -259,6 +273,16 @@ class TestAmendRegenerateSkip(unittest.TestCase):
             data = helpers.read_book(d)
             self.assertEqual(data["pages"][3]["image_file"], "skipped")
             self.assertEqual(data["pages"][3]["skip_reason"], "content policy")
+
+    def test_skip_without_reason_omits_key(self):
+        # P2: the no-reason branch — sentinel is set but no skip_reason is added.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            code, _, _ = helpers.run_cli("skip", "--page", "page-2", "--dir", d)
+            self.assertEqual(code, 0)
+            page = helpers.read_book(d)["pages"][2]
+            self.assertEqual(page["image_file"], "skipped")
+            self.assertNotIn("skip_reason", page)
 
 
 class TestFinalize(unittest.TestCase):
