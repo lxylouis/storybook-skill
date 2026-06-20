@@ -14,6 +14,18 @@ class TestStatusEmpty(unittest.TestCase):
             self.assertFalse(out["exists"])
             self.assertIn("init", out["next_action"])
 
+    def test_non_object_book_json_fails_structured(self):
+        # I2: a valid-JSON-but-not-an-object book.json (e.g. a truncated .bak
+        # that parses as 42) must return {error,hint} + exit 2, not a bare
+        # AttributeError traceback from the first .get().
+        with helpers.tmp() as td:
+            d = helpers.write_book(Path(td) / "book", 42)
+            code, out, err = helpers.run_cli("status", "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("error", out)
+            self.assertIn("hint", out)
+            self.assertNotIn("Traceback", err)
+
 
 class TestInit(unittest.TestCase):
     def test_init_creates_book(self):
@@ -133,6 +145,10 @@ class TestComposePrompt(unittest.TestCase):
             code, out, _ = helpers.run_cli("compose-prompt", "--page", "page-1", "--dir", d)
             self.assertEqual(code, 0)
             self.assertLessEqual(out["prompt_len"], 500)
+            # I1: the fixed consistency constraints are the tail and must NOT be
+            # the thing that gets cut — old code did prompt[:497] and lost them.
+            self.assertTrue(out["prompt"].endswith("no text or captions."),
+                            "constraints tail dropped: ...%s" % out["prompt"][-50:])
 
 
 class TestConfirmAndNext(unittest.TestCase):
@@ -167,6 +183,21 @@ class TestConfirmAndNext(unittest.TestCase):
                 code, out, _ = helpers.run_cli("next", "--dir", d)
             self.assertTrue(out["all_done"])
             self.assertIn("finalize", out["next_action"])
+
+    def test_next_cursor_clamps_past_end(self):
+        # P2: calling `next` again after all_done must not push the SSOT cursor
+        # beyond len(pages) — it would index out of range on any later read.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            n = len(helpers.read_book(d)["pages"])
+            data = helpers.read_book(d)
+            data["current_page_index"] = n - 1
+            helpers.write_book(d, data)
+            for _ in range(3):  # one to finish, two more past the end
+                code, out, _ = helpers.run_cli("next", "--dir", d)
+                self.assertEqual(code, 0)
+                self.assertTrue(out["all_done"])
+            self.assertEqual(helpers.read_book(d)["current_page_index"], n)
 
 
 class TestAmendRegenerateSkip(unittest.TestCase):
@@ -299,6 +330,9 @@ class TestSkillPackage(unittest.TestCase):
             self.assertIn(ref, text)  # SKILL.md 必须指到每篇 reference
         self.assertIn("storybook.py", text)
         self.assertIn("gen_image.py", text)
+        # DashScope is the only image path for 百炼 users — its doc link must
+        # not silently drop out of SKILL.md.
+        self.assertIn("gen_image_dashscope.py", text)
 
 
 if __name__ == "__main__":

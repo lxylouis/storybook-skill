@@ -41,6 +41,15 @@ def _fail(error, hint=""):
     _emit(payload, 2)
 
 
+def _looks_like_image(b):
+    """True only for PNG / JPEG / WebP magic bytes. Blocks writing a 200-but-
+    not-an-image body (HTML error page, JSON, wrong format) to disk as a fake
+    PNG — otherwise the downstream save-image trusts the extension and the lie
+    propagates ('never pretend an image was produced')."""
+    return (b.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff"))
+            or (b[:4] == b"RIFF" and b[8:12] == b"WEBP"))
+
+
 def _read_prompt(args):
     if args.prompt:
         return args.prompt.strip()
@@ -87,6 +96,9 @@ def main(argv=None):
         size = (args.size or os.environ.get("STORYBOOK_IMAGE_SIZE", "1024x1536")).strip()
         retry_sleep = float(os.environ.get("STORYBOOK_IMAGE_RETRY_BASE_SLEEP", "2"))
         prompt = _read_prompt(args)
+        if not prompt:
+            _fail("prompt is empty after stripping",
+                  hint="Pass real text via --prompt '...' or --prompt-file <path|->.")
 
         payload = {"model": model, "prompt": prompt, "size": size, "n": 1}
         url = base_url + "/images/generations"
@@ -120,20 +132,44 @@ def main(argv=None):
                        "command; if it persists, run `storybook.py regenerate` "
                        "to log the attempt and consider `skip` after 3 failures.")
 
+        # Some OpenAI-compatible gateways report failures as HTTP 200 with an
+        # {"error": {...}} body (content-policy blocks, quota, bad model). Surface
+        # that instead of letting it fall through to the generic "neither b64 nor
+        # url" message, which would bury the real reason.
+        if isinstance(result, dict) and result.get("error"):
+            _fail("provider error: %s" % result["error"],
+                  hint="The endpoint returned HTTP 200 with an error body — "
+                       "often a content-policy block or an invalid model/size. "
+                       "Full response: %s" % json.dumps(result)[:500])
+
         data = (result.get("data") or [{}])[0]
         img_bytes = None
         if data.get("b64_json"):
             img_bytes = base64.b64decode(data["b64_json"])
         elif data.get("url"):
-            with urllib.request.urlopen(data["url"], timeout=180) as resp:
+            img_url = str(data["url"])
+            if not img_url.startswith(("http://", "https://")):
+                _fail("provider returned a non-HTTP image url: %r" % img_url,
+                      hint="Only http(s) image URLs are fetched.")
+            with urllib.request.urlopen(img_url, timeout=180) as resp:
                 img_bytes = resp.read()
         if not img_bytes:
             _fail("provider returned neither b64_json nor url",
                   hint="Raw response keys: %s" % list(result.keys()))
+        if not _looks_like_image(img_bytes):
+            _fail("provider response is not a PNG/JPEG/WebP image "
+                  "(%d bytes starting %r)" % (len(img_bytes), img_bytes[:8]),
+                  hint="The endpoint returned a non-image body (HTML error page "
+                       "or unsupported format) as 200. Check model/size/prompt; "
+                       "see the README provider table.")
 
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_bytes(img_bytes)
+        # Atomic write: a truncated/failed write must not leave a half-file that
+        # save-image would happily accept.
+        tmp = out_path.with_name(out_path.name + ".tmp")
+        tmp.write_bytes(img_bytes)
+        os.replace(tmp, out_path)
         _emit({"ok": True, "out": str(out_path.resolve()),
                "size_bytes": len(img_bytes), "model": model, "size": size})
     except SystemExit:

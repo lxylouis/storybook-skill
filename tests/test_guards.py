@@ -240,3 +240,39 @@ class TestGuardMatrix(unittest.TestCase):
                     code, 2,
                     "argv=%s phase=%s expected guard, got %s" % (build(str(d)), phase, out))
                 self.assertEqual(out.get("current_phase"), phase)
+
+
+class TestCoverPhaseException(unittest.TestCase):
+    """The cover is illustratable one phase EARLY (awaiting_outline_confirm),
+    unlike body pages — the most regression-prone guard in the file. Verify
+    both directions for the two cover commands: blocked in outlining, allowed
+    in {awaiting_outline_confirm, illustrating, delivered}."""
+
+    PHASES = ["outlining", "awaiting_outline_confirm", "illustrating", "delivered"]
+    ALLOWED = {"awaiting_outline_confirm", "illustrating", "delivered"}
+
+    def test_compose_prompt_cover(self):
+        for phase in self.PHASES:
+            with helpers.tmp() as td:
+                d = helpers.make_book(td, phase=phase, with_images=True)
+                code, out, _ = helpers.run_cli(
+                    "compose-prompt", "--page", "cover", "--dir", d)
+                if phase in self.ALLOWED:
+                    self.assertEqual(code, 0, "blocked in %s: %s" % (phase, out))
+                else:
+                    self.assertEqual(code, 2, "allowed in %s" % phase)
+                    self.assertEqual(out.get("current_phase"), phase)
+
+    def test_save_image_cover(self):
+        for phase in self.PHASES:
+            with helpers.tmp() as td:
+                d = helpers.make_book(td, phase=phase, with_images=True)
+                src = Path(td) / "src.png"
+                src.write_bytes(helpers.TINY_PNG)
+                code, out, _ = helpers.run_cli(
+                    "save-image", "--page", "cover", "--file", str(src), "--dir", d)
+                if phase in self.ALLOWED:
+                    self.assertEqual(code, 0, "blocked in %s: %s" % (phase, out))
+                else:
+                    self.assertEqual(code, 2, "allowed in %s" % phase)
+                    self.assertEqual(out.get("current_phase"), phase)

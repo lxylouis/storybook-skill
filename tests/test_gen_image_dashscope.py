@@ -56,6 +56,46 @@ class TestGenImageDashScope(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(api.posts, 3)
 
+    def test_unexpected_structure_is_reported(self):
+        # I5-B: a 200 dict with no usable output.choices[].image must take the
+        # structured _fail path (not crash) — previously untested.
+        with helpers.tmp() as td, helpers.FakeDashScopeAPI(mode="badshape") as api:
+            out_png = Path(td) / "o.png"
+            code, out, err = helpers.run_gen_ds(
+                "--prompt", "a fox", "--out", out_png,
+                env_extra={"STORYBOOK_IMAGE_API_KEY": "k",
+                           "STORYBOOK_IMAGE_BASE_URL": api.base_url})
+            self.assertEqual(code, 2)
+            self.assertIn("unexpected DashScope response structure", out["error"])
+            self.assertNotIn("Traceback", err)
+            self.assertFalse(out_png.exists())
+
+    def test_non_image_download_rejected_and_no_file(self):
+        # I4: a valid-looking response whose image URL returns a non-image body
+        # must not be written to disk as a PNG.
+        with helpers.tmp() as td, helpers.FakeDashScopeAPI(bad_image=True) as api:
+            out_png = Path(td) / "o.png"
+            code, out, _ = helpers.run_gen_ds(
+                "--prompt", "a fox", "--out", out_png,
+                env_extra={"STORYBOOK_IMAGE_API_KEY": "k",
+                           "STORYBOOK_IMAGE_BASE_URL": api.base_url,
+                           "STORYBOOK_IMAGE_RETRY_BASE_SLEEP": "0"})
+            self.assertEqual(code, 2)
+            self.assertIn("not a PNG/JPEG/WebP", out["error"])
+            self.assertFalse(out_png.exists())
+            self.assertFalse((Path(td) / "o.png.tmp").exists())
+
+    def test_empty_prompt_rejected_before_http(self):
+        # P2: a whitespace-only prompt must fail fast, never hit DashScope.
+        with helpers.tmp() as td:
+            out_png = Path(td) / "o.png"
+            code, out, _ = helpers.run_gen_ds(
+                "--prompt", "   ", "--out", out_png,
+                env_extra={"STORYBOOK_IMAGE_API_KEY": "k"})
+            self.assertEqual(code, 2)
+            self.assertIn("empty", out["error"])
+            self.assertFalse(out_png.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -116,13 +116,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class FakeImageAPI:
     """Serves POST /v1/images/generations and GET /img.png on 127.0.0.1.
 
-    mode: "b64" → returns data[0].b64_json; "url" → returns data[0].url.
-    fail_times: first N POSTs answer 500 (retry testing).
+    mode: "b64" → data[0].b64_json (valid PNG); "url" → data[0].url;
+          "apierror" → HTTP 200 carrying {"error":{...}} (gateway-style);
+          "empty"    → HTTP 200 with an empty data[];
+          "notimage" → HTTP 200 b64 of a non-image body (HTML error page).
+    fail_times:   first N POSTs answer 500 (retry testing).
+    client_error: if set, the POST answers this 4xx (fast-fail, no retry).
     """
 
-    def __init__(self, mode="b64", fail_times=0):
+    def __init__(self, mode="b64", fail_times=0, client_error=0):
         self.mode = mode
         self.fail_times = fail_times
+        self.client_error = client_error
         self.posts = 0
         api = self
 
@@ -144,12 +149,22 @@ class FakeImageAPI:
                 if api.posts <= api.fail_times:
                     self._json(500, {"error": {"message": "boom"}})
                     return
-                if api.mode == "b64":
+                if api.client_error:
+                    self._json(api.client_error, {"error": {"message": "bad request"}})
+                    return
+                if api.mode == "apierror":
+                    self._json(200, {"error": {"message": "content policy"}})
+                elif api.mode == "empty":
+                    self._json(200, {"data": []})
+                elif api.mode == "notimage":
                     self._json(200, {"data": [{"b64_json":
-                        base64.b64encode(TINY_PNG).decode("ascii")}]})
-                else:
+                        base64.b64encode(b"<html>error</html>").decode("ascii")}]})
+                elif api.mode == "url":
                     self._json(200, {"data": [{"url":
                         "http://127.0.0.1:%d/img.png" % api.port}]})
+                else:  # b64
+                    self._json(200, {"data": [{"b64_json":
+                        base64.b64encode(TINY_PNG).decode("ascii")}]})
 
             def do_GET(self):
                 self.send_response(200)
@@ -191,13 +206,16 @@ class FakeDashScopeAPI:
     """Minimal DashScope multimodal-generation stub on 127.0.0.1.
 
     mode: "ok" → returns an image URL pointing back at this server;
-          "apierror" → HTTP 200 body carrying code/message (DashScope style).
+          "apierror" → HTTP 200 body carrying code/message (DashScope style);
+          "badshape" → HTTP 200 object with no usable output.choices[].image.
     fail_times: first N POSTs answer 500 (retry testing).
+    bad_image:  GET /img.png returns a non-image body (expired-link page).
     """
 
-    def __init__(self, mode="ok", fail_times=0):
+    def __init__(self, mode="ok", fail_times=0, bad_image=False):
         self.mode = mode
         self.fail_times = fail_times
+        self.bad_image = bad_image
         self.posts = 0
         api = self
 
@@ -224,6 +242,9 @@ class FakeDashScopeAPI:
                                      "message": "size not supported",
                                      "request_id": "t"})
                     return
+                if api.mode == "badshape":
+                    self._json(200, {"output": {"choices": []}, "request_id": "t"})
+                    return
                 self._json(200, {
                     "output": {"choices": [{"message": {"content": [
                         {"image": "http://127.0.0.1:%d/img.png" % api.port}]}}]},
@@ -231,11 +252,12 @@ class FakeDashScopeAPI:
                 })
 
             def do_GET(self):
+                body = b"<html>error</html>" if api.bad_image else TINY_PNG
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
-                self.send_header("Content-Length", str(len(TINY_PNG)))
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(TINY_PNG)
+                self.wfile.write(body)
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self.server.server_address[1]

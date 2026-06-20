@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -38,6 +39,14 @@ def _fail(error, hint=""):
     if hint:
         payload["hint"] = hint
     _emit(payload, 2)
+
+
+def _looks_like_image(b):
+    """True only for PNG / JPEG / WebP magic bytes. Blocks writing a non-image
+    download (expired-link HTML, error page) to disk as a fake PNG — otherwise
+    save-image trusts the extension and the lie propagates."""
+    return (b.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff"))
+            or (b[:4] == b"RIFF" and b[8:12] == b"WEBP"))
 
 
 def _read_prompt(args):
@@ -80,7 +89,6 @@ def _normalize_size(size_str):
     if s.upper() in ("1K", "2K"):
         return s.upper()
     # Convert "WxH" or "W*H" to "W×H"
-    import re
     m = re.match(r"^(\d{3,4})\s*[x×\*X]\s*(\d{3,4})$", s)
     if m:
         w, h = int(m.group(1)), int(m.group(2))
@@ -135,6 +143,9 @@ def main(argv=None):
             os.environ.get("STORYBOOK_IMAGE_RETRY_BASE_SLEEP", "2")
         )
         prompt = _read_prompt(args)
+        if not prompt:
+            _fail("prompt is empty after stripping",
+                  hint="Pass real text via --prompt '...' or --prompt-file <path|->.")
 
         # Build DashScope request body
         payload = {
@@ -207,11 +218,18 @@ def main(argv=None):
                 result["output"]["choices"][0]["message"]["content"][0]["image"]
             )
         except (KeyError, IndexError, TypeError):
-            _fail(
-                "unexpected DashScope response structure",
-                hint="Raw response keys: %s" % list(result.keys())
-                     if isinstance(result, dict) else str(result)[:300],
-            )
+            # Build the hint in plain statements: the inline
+            # "...%s" % x if cond else y form is a precedence trap (% binds
+            # tighter than the ternary) that reads as if the else were dead.
+            if isinstance(result, dict):
+                detail = "Raw response keys: %s" % list(result.keys())
+            else:
+                detail = "Raw response: %s" % str(result)[:300]
+            _fail("unexpected DashScope response structure", hint=detail)
+
+        if not str(image_url).startswith(("http://", "https://")):
+            _fail("DashScope returned a non-HTTP image url: %r" % image_url,
+                  hint="Only http(s) image URLs are fetched.")
 
         # Download the image (URL valid for 24h per DashScope docs)
         for attempt in range(3):
@@ -230,9 +248,20 @@ def main(argv=None):
                      "Re-generate the image.",
             )
 
+        if not _looks_like_image(img_bytes):
+            _fail(
+                "downloaded data is not a PNG/JPEG/WebP image "
+                "(%d bytes starting %r)" % (len(img_bytes), img_bytes[:8]),
+                hint="The image URL returned a non-image body (error page or "
+                     "expired link). Re-generate the image.",
+            )
+
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_bytes(img_bytes)
+        # Atomic write: never leave a half-written file that save-image accepts.
+        tmp = out_path.with_name(out_path.name + ".tmp")
+        tmp.write_bytes(img_bytes)
+        os.replace(tmp, out_path)
 
         _emit({
             "ok": True,

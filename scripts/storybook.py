@@ -83,6 +83,16 @@ def _load_book(book_dir):
             hint="Restore from book.json.bak (copy it over book.json) and "
                  "re-run `status`.",
         )
+    # Valid JSON that isn't an object (e.g. a truncated-but-parseable 42 or
+    # [..]) would otherwise blow up on the first .get() with a bare traceback,
+    # breaking the {error,hint,exit 2} contract — common when a .bak is itself
+    # damaged. Catch it here so every caller stays on the structured path.
+    if not isinstance(data, dict):
+        _fail(
+            "book.json is not a JSON object (corrupted or hand-edited)",
+            hint="Restore from book.json.bak (copy it over book.json) and "
+                 "re-run `status`.",
+        )
     return data
 
 
@@ -360,10 +370,16 @@ def cmd_compose_prompt(args):
     style = style[:100].strip()
     chars = chars[:120].strip()
     ipr = ipr[:180].strip()
-    parts = [s for s in [style, chars, ipr, CONSISTENCY_CONSTRAINTS] if s]
-    prompt = "\n".join(parts)
-    if len(prompt) > 500:
-        prompt = prompt[:497].strip() + "..."
+    # Reserve the consistency constraints' full budget FIRST, then fit the
+    # variable sections into whatever room is left. The old code joined all
+    # four then cut the tail with prompt[:497] — which is the constraints
+    # themselves ("no text or captions"), the one segment prompts.md marks as
+    # fixed-and-undeletable. Now only the variable head ever gets shortened.
+    room = 500 - len(CONSISTENCY_CONSTRAINTS) - 1   # -1 for the joining newline
+    head = "\n".join(s for s in [style, chars, ipr] if s)
+    if len(head) > room:
+        head = head[:room - 3].rstrip() + "..."
+    prompt = head + "\n" + CONSISTENCY_CONSTRAINTS if head else CONSISTENCY_CONSTRAINTS
     _emit({
         "ok": True, "page_id": pid, "prompt": prompt, "prompt_len": len(prompt),
         "next_action": "Generate ONE portrait (~2:3) image from this prompt — "
@@ -476,7 +492,10 @@ def cmd_next(args):
     pages = data.get("pages", [])
     if not pages:
         _fail("no pages — save-outline first")
-    next_idx = int(data.get("current_page_index", 0)) + 1
+    # Clamp at len(pages): calling `next` again after all_done must not push the
+    # SSOT cursor past the last page (it would index out of range on any later
+    # read). The all_done branch below still fires at == len(pages).
+    next_idx = min(int(data.get("current_page_index", 0)) + 1, len(pages))
     data["current_page_index"] = next_idx
     _write_book(args.dir, data)
     if next_idx >= len(pages):
