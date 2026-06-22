@@ -140,7 +140,7 @@
   #prevbtn svg { transform: rotate(180deg); }
 
   /* ── 书本容器:移动端 = 上图下文;桌面端 = 摊开书 ─────── */
-  #book { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #book { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; touch-action: pan-y; }
 
   /* 插画区(移动端:画框 flex 52%) */
   #artpane { position: relative; flex: 1 1 52%; min-height: 0; padding: 4px 14px 0; }
@@ -306,14 +306,33 @@
   /* ── 打印(每页一版;隐藏界面与装饰层) ─────────────────── */
   #printpages { display: none; }
   @media print {
+    @page { size: A4 portrait; margin: 14mm; }
     body > header, body > main, #doodles { display: none; }
     body { overflow: visible; background: #fff; }
     body::after { display: none; }
     #printpages { display: block; }
-    .print-page { page-break-after: always; text-align: center; padding: 24px; }
-    .print-page img { max-width: 100%; max-height: 70vh; }
-    .print-page .pp-title { font-family: var(--font-title); font-size: 20px; margin: 12px 0 6px; }
-    .print-page .pp-text { font-size: 14px; line-height: 1.6; text-align: left; white-space: pre-wrap; }
+    /* let the candy palette actually print instead of being knocked out to save ink */
+    #printpages * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    /* one A4 sheet per page, content vertically centred (min-height resolves to the
+       printable area; the old 70vh was viewport-relative and drifted with window size) */
+    .print-page {
+      box-sizing: border-box;
+      min-height: calc(297mm - 28mm);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8mm; text-align: center;
+      page-break-after: always; break-after: page;
+    }
+    .print-page:last-child { page-break-after: auto; break-after: auto; }
+    /* whole illustration, no crop; caps in mm so print scale is stable */
+    .print-page img {
+      max-width: 176mm; max-height: 150mm; width: auto; height: auto;
+      border-radius: 4mm; border: 1pt solid #e3d6ba; background: #fbf5e8;
+    }
+    .print-page .pp-title { font-family: var(--font-title); font-size: 22pt; margin: 0; color: #3a2410; }
+    .print-page .pp-text {
+      max-width: 156mm; margin: 0; font-size: 14pt; line-height: 1.85;
+      color: #4a2f17; text-align: center; white-space: pre-wrap;
+    }
   }
 </style>
 </head>
@@ -322,7 +341,7 @@
 <div id="doodles" aria-hidden="true"></div>
 <header>
   <h1 id="booktitle"></h1>
-  <button class="sticker st-paper" id="printbtn" onclick="window.print()" title="打印或另存为 PDF / Print or save as PDF">🖨️ <span id="printlabel">打印</span></button>
+  <button class="sticker st-paper" id="printbtn" title="打印或另存为 PDF / Print or save as PDF">🖨️ <span id="printlabel">打印</span></button>
   <button class="sticker" id="langbtn" aria-label="切换语言 Toggle language">
     <span class="pill on" id="pill-zh">CN</span><span class="sep">/</span><span class="pill" id="pill-en">EN</span>
   </button>
@@ -551,9 +570,46 @@ function spawnFlipSheet(dir, mobile) {
   }, 700);
 }
 
+/* 轻柔翻书音效 —— Web Audio 现场合成(无音频文件):过滤白噪声 + 低通下扫,
+   "哗——"一声。AudioContext 共享并在用户手势(点击/键盘/滑动触发的翻页)里 resume。 */
+var _sbAudioCtx = null;
+function playPageTurn() {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { return; }
+    _sbAudioCtx = _sbAudioCtx || new AC();
+    var ctx = _sbAudioCtx;
+    if (ctx.state === "suspended") { ctx.resume(); }
+    var now = ctx.currentTime;
+    var dur = 0.5;
+    var len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) {
+      var tt = i / len;
+      var env = Math.pow(Math.sin(Math.PI * tt), 2);   // 钟形包络,两头极轻
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    var lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 0.4;
+    lp.frequency.setValueAtTime(1900, now);
+    lp.frequency.exponentialRampToValueAtTime(650, now + dur);
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.06, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.0004, now + dur);
+    src.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+    src.start(now); src.stop(now + dur + 0.03);
+  } catch (e) { /* 无音频环境,静默 */ }
+}
+
 function go(delta) {
   var n = state.index + delta;
   if (n < 0 || n >= TOTAL) { return; }
+  playPageTurn();
   state.index = n;
   state.dir = delta > 0 ? "next" : "prev";
   stopSpeech();
@@ -670,13 +726,20 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "ArrowRight" || e.key === "ArrowDown") { go(1); }
   else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { go(-1); }
 });
-var touchX = null;
-document.addEventListener("touchstart", function (e) { touchX = e.touches[0].clientX; });
-document.addEventListener("touchend", function (e) {
-  if (touchX === null) { return; }
-  var dx = e.changedTouches[0].clientX - touchX;
-  if (Math.abs(dx) > 40) { go(dx < 0 ? 1 : -1); }
-  touchX = null;
+/* 指针滑动翻页:覆盖触摸/手写笔(鼠标排除,避免桌面选词拖拽误翻页)。
+   要求横向位移既过阈值、又明显压过纵向(dx>1.4·dy)——竖向滚动文字卡不再被误判成翻页。 */
+var swipeStart = null;
+document.addEventListener("pointerdown", function (e) {
+  if (e.pointerType === "mouse") { swipeStart = null; return; }
+  swipeStart = { x: e.clientX, y: e.clientY };
+});
+document.addEventListener("pointerup", function (e) {
+  var s = swipeStart;
+  swipeStart = null;
+  if (!s) { return; }
+  var dx = e.clientX - s.x;
+  var dy = e.clientY - s.y;
+  if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) { go(dx < 0 ? 1 : -1); }
 });
 
 /* 断点切换时重排标题/字号与页码位置 */
@@ -696,6 +759,19 @@ else if (mqDesktop.addListener) { mqDesktop.addListener(onModeChange); }
   });
   holder.innerHTML = html;
 })();
+
+/* 打印前先把每页插画 decode 完再 window.print() —— 否则大图/base64 还没解码就开打,
+   会出现空白或半张图的页(尤其内嵌模式)。坏图不阻塞打印。 */
+function printBook() {
+  var imgs = Array.prototype.slice.call(document.querySelectorAll("#printpages img"));
+  Promise.all(imgs.map(function (im) {
+    if (im.complete && im.naturalWidth) { return Promise.resolve(); }
+    return (im.decode ? im.decode() : Promise.resolve()).catch(function () {});
+  })).then(function () {
+    setTimeout(function () { try { window.print(); } catch (e) { /* noop */ } }, 100);
+  });
+}
+document.getElementById("printbtn").onclick = printBook;
 
 buildDoodles();
 renderChrome();

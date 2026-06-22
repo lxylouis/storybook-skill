@@ -49,6 +49,23 @@ class TestExport(unittest.TestCase):
             code, _, _ = helpers.run_cli("export", "--dir", d)
             self.assertEqual(code, 2)
 
+    def test_viewer_has_synced_reader_features(self):
+        # Regression guard for the upstream reader UX synced into the viewer:
+        # flip sound, A4 print sizing, decode-before-print, pointer swipe.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli("export", "--dir", d)
+            self.assertEqual(code, 0)
+            html = Path(out["html"]).read_text(encoding="utf-8")
+            self.assertIn("@page { size: A4 portrait", html)   # A4 print sizing
+            self.assertIn("print-color-adjust: exact", html)
+            self.assertIn("function playPageTurn", html)        # flip sound...
+            self.assertIn("playPageTurn();", html)              # ...actually fired in go()
+            self.assertIn("function printBook", html)           # decode-before-print
+            self.assertIn("im.decode", html)
+            self.assertIn("pointerdown", html)                  # pointer swipe
+            self.assertIn("touch-action: pan-y", html)
+
 
 class TestExportSecurity(unittest.TestCase):
     """XSS hardening for the self-contained, shared-around HTML (C1 + I3)."""
