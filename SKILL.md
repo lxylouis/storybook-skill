@@ -84,6 +84,9 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
   3 次**(看返回的 failed_attempts)就建议用户 `skip`,别无限重试。
 - `finalize` 之后把 **`.zip` 绝对路径**给用户:解压后双击文件夹里的 `index.html` 打开;
   浏览器打印 = PDF。想要「单个文件好分享」就 `finalize --inline`(2K 图较多时可能几十 MB)。
+- **「我自己读」录音例外**:浏览器只在安全上下文给麦克风,双击 `file://` 打开时录音用不了
+  (面板会提示)。交付时若用户想用录音,告诉他用**本地 http 打开**(进解压目录跑
+  `python3 -m http.server` 再访问)。回放/下载/朗读/翻页音效/打印都不受此限。
 - 返修:只改文字 → `amend-page` 后直接 `export`(图复用);改了 image_prompt →
   `amend-page` → `regenerate` → 重出图 → `save-image` → `export`;只是图不满意
   → `regenerate` → 重出 → `save-image` → `export`。

@@ -753,8 +753,11 @@ def cmd_finalize(args):
         "next_action": "Book delivered! Give the user the .zip absolute path — "
                        "unzip and open the folder's index.html (Print = PDF). "
                        "For a single shareable file instead, run finalize "
-                       "--inline. Later revisions: amend-page / regenerate → "
-                       "save-image → export (--zip to re-bundle).",
+                       "--inline. The 'read it myself' recording needs the book "
+                       "opened over local http (browsers block the mic on "
+                       "file://) — mention this if the user wants to record. "
+                       "Later revisions: amend-page / regenerate → save-image → "
+                       "export (--zip to re-bundle).",
     })
 
 
