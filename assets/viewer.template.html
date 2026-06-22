@@ -194,6 +194,20 @@
   #bottomrow { display: flex; flex-direction: column; gap: 10px; }
   #speakrow { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   #pageno { display: none; text-align: right; font-size: 13px; color: var(--ink-faint); font-weight: 600; }
+  /* ── 「我自己读」录音区 ───────────────────────────────── */
+  .st-sky { background: #6FA8DC; border-color: #4F86C0; color: #FFF8E8; padding: 9px 20px; font-size: 16px; }
+  .st-rec { background: #E0584F; border-color: #C0463E; color: #FFF8E8; }
+  .st-mini { padding: 6px 14px; font-size: 14px; }
+  #recbtn .rec-saved-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #E0584F; margin-left: 5px; vertical-align: middle; }
+  #recpanel { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 18px; background: var(--paper-card); border: 2px dashed rgba(89,53,26,.28); }
+  #recpanel.open { display: block; }
+  #recpanel .rec-hint { text-align: center; font-size: 13px; color: var(--ink-faint); margin-bottom: 10px; }
+  #recpanel .rec-row { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  #recpanel .rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: #D9534F; min-width: 50px; text-align: center; }
+  #recpanel .rec-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #E0584F; margin-right: 6px; vertical-align: middle; animation: rec-blink 1s steps(2, start) infinite; }
+  #recpanel a.sticker { text-decoration: none; }
+  @keyframes rec-blink { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { #recpanel .rec-dot { animation: none; } }
 
   /* ── 仿真翻页纸(sb-flipsheet) ────────────────────────── */
   #book.flipstage { perspective: 1800px; }
@@ -247,6 +261,10 @@
   }
   #pic.anim-next { animation: sb-page-in .32s cubic-bezier(.22,1,.36,1); }
   #pic.anim-prev { animation: sb-page-in-rev .32s cubic-bezier(.22,1,.36,1); }
+  /* 翻页遮挡:翻页途中即时蒙掉配文(#pic 自带淡入动画,但 #pagetext——尤其移动端
+     不在翻页纸下方——会提前露出旧文字),揭示新页时再淡入。 */
+  #pagetext { transition: opacity .28s ease; }
+  #book.flipveil #pagetext { opacity: 0; transition: none; }
 
   @media (prefers-reduced-motion: reduce) {
     .flipsheet { display: none; }
@@ -362,7 +380,11 @@
           <button class="sticker st-honey" id="speakbtn" title="朗读本页 / Read this page aloud">
             <span id="speakicon">🦉</span> <span id="speaklabel">读给我听</span>
           </button>
+          <button class="sticker st-sky" id="recbtn" title="录下你自己读这一页 / Record yourself reading">
+            🦜 <span id="reclabel">我自己读</span>
+          </button>
         </div>
+        <div id="recpanel" aria-live="polite"></div>
         <div id="pageno"></div>
       </div>
     </div>
@@ -387,7 +409,17 @@ var STR = {
   readToMe: { zh: "读给我听", en: "Read to Me" },
   stop:     { zh: "停止",     en: "Stop" },
   print:    { zh: "打印",     en: "Print" },
-  cover:    { zh: " (封面)",  en: " (cover)" }
+  cover:    { zh: " (封面)",  en: " (cover)" },
+  letMeRead:{ zh: "我自己读", en: "Read it Myself" },
+  startRec: { zh: "开始录音", en: "Record" },
+  stopRec:  { zh: "停止",     en: "Stop" },
+  rerec:    { zh: "重录",     en: "Re-record" },
+  dl:       { zh: "下载",     en: "Download" },
+  playRec:  { zh: "回放",     en: "Play" },
+  pauseRec: { zh: "暂停",     en: "Pause" },
+  recHint:  { zh: "读出这一页,录下你自己的声音 🎈", en: "Read this page aloud and record your voice 🎈" },
+  recOn:    { zh: "录音中",   en: "Recording" },
+  micNo:    { zh: "麦克风不可用——把成品用本地服务器(http)打开才能录音", en: "Mic unavailable — open over http (a local server) to record" }
 };
 var mqDesktop = window.matchMedia("(min-width: 900px) and (orientation: landscape)");
 var mqReduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -498,6 +530,7 @@ function renderChrome() {
   document.getElementById("pill-en").className = "pill" + (state.lang === "en" ? " on" : "");
   document.getElementById("printlabel").textContent = t(STR.print, state.lang);
   document.getElementById("speaklabel").textContent = t(speaking ? STR.stop : STR.readToMe, state.lang);
+  document.getElementById("reclabel").textContent = t(STR.letMeRead, state.lang);
   document.getElementById("prevbtn").disabled = state.index === 0;
   document.getElementById("nextbtn").disabled = state.index >= TOTAL - 1;
 }
@@ -537,6 +570,7 @@ function renderPage(animate) {
   var badge = (state.shown + 1) + " / " + TOTAL + (p.page_no === 0 ? t(STR.cover, lang) : "");
   document.getElementById("pagebadge").textContent = badge;
   document.getElementById("pageno").textContent = badge;
+  renderRecPanel();
 }
 
 /* ── 仿真翻页纸(FlipSheet 移植) ────────────────────────── */
@@ -606,6 +640,10 @@ function playPageTurn() {
   } catch (e) { /* 无音频环境,静默 */ }
 }
 
+function setVeil(on) {
+  document.getElementById("book").classList.toggle("flipveil", on);
+}
+
 function go(delta) {
   var n = state.index + delta;
   if (n < 0 || n >= TOTAL) { return; }
@@ -613,6 +651,7 @@ function go(delta) {
   state.index = n;
   state.dir = delta > 0 ? "next" : "prev";
   stopSpeech();
+  stopRecActive();   /* 翻页前:进行中的录音收尾、回放暂停 */
   renderChrome();
   if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
   var mobile = !mqDesktop.matches;
@@ -628,13 +667,15 @@ function go(delta) {
   var delay = mobile ? (state.dir === "next" ? 0 : 480)
                      : (state.dir === "next" ? 470 : 110);
   if (delay === 0) {
-    state.shown = state.index;
+    state.shown = state.index;   /* 掀起即露出,物理正确,无需遮挡 */
     renderPage(true);
     return;
   }
+  setVeil(true);   /* 翻页途中即时蒙掉配文,杜绝旧文字提前露馅 */
   revealTimer = setTimeout(function () {
     state.shown = state.index;
     renderPage(true);
+    setVeil(false);   /* 揭示新页时淡入 */
     revealTimer = null;
   }, delay);
 }
@@ -646,6 +687,7 @@ document.getElementById("langbtn").onclick = function () {
   stopSpeech();
   renderChrome();
   renderPage(false);
+  buildPrint(state.lang);   /* 打印页跟随语言切换 */
 };
 
 /* ── 高质量语音选择 ────────────────────────────────────── */
@@ -747,22 +789,27 @@ function onModeChange() { renderChrome(); renderPage(false); }
 if (mqDesktop.addEventListener) { mqDesktop.addEventListener("change", onModeChange); }
 else if (mqDesktop.addListener) { mqDesktop.addListener(onModeChange); }
 
-/* ── 打印页(每页一版,中英双语) ────────────────────────── */
-(function buildPrint() {
+/* ── 打印页(每页一版,只打**当前语言**;封面=书名+作者) ──────
+   中英不再堆在同一页:跟随 CN/EN 切换,所见即所打。 */
+function buildPrint(lang) {
   var holder = document.getElementById("printpages");
   var html = "";
   BOOK.pages.forEach(function (p) {
+    var title = p.page_no === 0 ? t(BOOK.title, lang) : t(p.page_title, lang);
+    var body = p.page_no === 0
+      ? (lang === "zh" ? (BOOK.author || "") + " · 著" : "by " + (BOOK.author || ""))
+      : t(p.narration, lang);
     html += '<div class="print-page">' + pageImage(p) +
-      '<div class="pp-title">' + esc(p.page_no === 0 ? t(BOOK.title, "zh") : t(p.page_title, "zh")) + "</div>" +
-      '<div class="pp-text">' + esc(p.page_no === 0 ? (BOOK.author || "") :
-        (t(p.narration, "zh") + "\n\n" + t(p.narration, "en"))) + "</div></div>";
+      (title ? '<div class="pp-title">' + esc(title) + "</div>" : "") +
+      '<div class="pp-text">' + esc(body) + "</div></div>";
   });
   holder.innerHTML = html;
-})();
+}
 
-/* 打印前先把每页插画 decode 完再 window.print() —— 否则大图/base64 还没解码就开打,
-   会出现空白或半张图的页(尤其内嵌模式)。坏图不阻塞打印。 */
+/* 打印前先按当前语言重建打印页,再把每页插画 decode 完才 window.print() ——
+   否则大图/base64 还没解码就开打,会出现空白或半张图的页。坏图不阻塞打印。 */
 function printBook() {
+  buildPrint(state.lang);
   var imgs = Array.prototype.slice.call(document.querySelectorAll("#printpages img"));
   Promise.all(imgs.map(function (im) {
     if (im.complete && im.naturalWidth) { return Promise.resolve(); }
@@ -773,9 +820,115 @@ function printBook() {
 }
 document.getElementById("printbtn").onclick = printBook;
 
+/* ── 「我自己读」逐页录音(会话内:录 / 回放 / 重录 / 下载)──────────────
+   浏览器 MediaRecorder;录音只活在本次浏览中,可下载留存,但不写进 HTML 文件。
+   注意:file:// 双击打开时浏览器通常禁用麦克风——需用本地 http 服务打开才能录。 */
+var recOpen = false;
+var recs = {};                 /* shown 索引 -> { url, ext } */
+var mediaRec = null, recChunks = [], recPage = null, recT0 = 0, recTick = null;
+var recAudio = null, recPlaying = false;
+var recSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+
+function _fmtMS(ms) {
+  var s = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+}
+function _recExt(mime) {
+  if (mime && (mime.indexOf("mp4") >= 0 || mime.indexOf("mpeg") >= 0)) { return "m4a"; }
+  if (mime && mime.indexOf("ogg") >= 0) { return "ogg"; }
+  return "webm";
+}
+function _stopRecAudio() { if (recAudio) { try { recAudio.pause(); } catch (e) { /* noop */ } } recPlaying = false; }
+function stopRecActive() {
+  _stopRecAudio();
+  if (mediaRec && mediaRec.state === "recording") { try { mediaRec.stop(); } catch (e) { /* noop */ } }
+}
+function updateRecTime() {
+  var el = document.getElementById("rectime");
+  if (el && window.performance) { el.textContent = _fmtMS(performance.now() - recT0); }
+}
+function startRec() {
+  if (!recSupported) { renderRecPanel(); return; }
+  recPage = state.shown;
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    var mr;
+    try { mr = new MediaRecorder(stream); } catch (e) { mr = null; }
+    if (!mr) { stream.getTracks().forEach(function (tk) { tk.stop(); }); recSupported = false; renderRecPanel(); return; }
+    recChunks = []; mediaRec = mr;
+    mr.ondataavailable = function (e) { if (e.data && e.data.size) { recChunks.push(e.data); } };
+    mr.onstop = function () {
+      stream.getTracks().forEach(function (tk) { tk.stop(); });
+      var mime = mr.mimeType || "audio/webm";
+      var blob = new Blob(recChunks, { type: mime });
+      if (recs[recPage] && recs[recPage].url) { URL.revokeObjectURL(recs[recPage].url); }
+      recs[recPage] = { url: URL.createObjectURL(blob), ext: _recExt(mime) };
+      mediaRec = null;
+      if (recTick) { clearInterval(recTick); recTick = null; }
+      renderRecPanel();
+    };
+    recT0 = window.performance ? performance.now() : 0;
+    mr.start();
+    if (recTick) { clearInterval(recTick); }
+    recTick = setInterval(updateRecTime, 200);
+    renderRecPanel();
+  }).catch(function () { recSupported = false; renderRecPanel(); /* 权限拒绝 / 非安全上下文 */ });
+}
+function stopRec() { if (mediaRec && mediaRec.state === "recording") { try { mediaRec.stop(); } catch (e) { /* noop */ } } }
+function playRec() {
+  var r = recs[state.shown];
+  if (!r) { return; }
+  if (!recAudio) { recAudio = new Audio(); recAudio.onended = function () { recPlaying = false; renderRecPanel(); }; }
+  if (recPlaying) { recAudio.pause(); recPlaying = false; renderRecPanel(); return; }
+  recAudio.src = r.url;
+  recAudio.play().then(function () { recPlaying = true; renderRecPanel(); }).catch(function () { recPlaying = false; });
+}
+function discardRec() {
+  var r = recs[state.shown];
+  if (r && r.url) { URL.revokeObjectURL(r.url); }
+  delete recs[state.shown];
+  _stopRecAudio();
+  renderRecPanel();
+}
+function renderRecPanel() {
+  var panel = document.getElementById("recpanel");
+  if (!panel) { return; }
+  panel.classList.toggle("open", recOpen);
+  if (!recOpen) { panel.innerHTML = ""; return; }
+  var lang = state.lang, html = "";
+  var recordingHere = mediaRec && mediaRec.state === "recording" && recPage === state.shown;
+  var r = recs[state.shown];
+  if (!recSupported) {
+    html = '<div class="rec-hint">' + esc(t(STR.micNo, lang)) + "</div>";
+  } else if (recordingHere) {
+    html = '<div class="rec-row"><span class="rec-time" id="rectime">0:00</span>' +
+      '<button class="sticker st-rec" id="rec-stop"><span class="rec-dot"></span>' + esc(t(STR.stopRec, lang)) + "</button></div>";
+  } else if (r) {
+    html = '<div class="rec-row">' +
+      '<button class="sticker st-sky st-mini" id="rec-play">' +
+        (recPlaying ? "⏸ " + esc(t(STR.pauseRec, lang)) : "▶ " + esc(t(STR.playRec, lang))) + "</button>" +
+      '<a class="sticker st-paper st-mini" id="rec-dl" download="recording-page-' + (state.shown + 1) + "." + r.ext + '" href="' + r.url + '">⬇ ' + esc(t(STR.dl, lang)) + "</a>" +
+      '<button class="sticker st-paper st-mini" id="rec-redo">↻ ' + esc(t(STR.rerec, lang)) + "</button></div>";
+  } else {
+    html = '<div class="rec-hint">' + esc(t(STR.recHint, lang)) + "</div>" +
+      '<div class="rec-row"><button class="sticker st-rec" id="rec-start">● ' + esc(t(STR.startRec, lang)) + "</button></div>";
+  }
+  panel.innerHTML = html;
+  var byId = function (id) { return document.getElementById(id); };
+  if (byId("rec-start")) { byId("rec-start").onclick = startRec; }
+  if (byId("rec-stop")) { byId("rec-stop").onclick = stopRec; }
+  if (byId("rec-play")) { byId("rec-play").onclick = playRec; }
+  if (byId("rec-redo")) { byId("rec-redo").onclick = function () { discardRec(); startRec(); }; }
+}
+document.getElementById("recbtn").onclick = function () {
+  recOpen = !recOpen;
+  if (!recOpen) { stopRecActive(); }
+  renderRecPanel();
+};
+
 buildDoodles();
 renderChrome();
 renderPage(false);
+buildPrint(state.lang);   /* 初始构建,使浏览器 Ctrl+P 直接打印也走当前语言 */
 </script>
 </body>
 </html>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+import zipfile
 from pathlib import Path
 
 import helpers
@@ -31,6 +32,23 @@ class TestExport(unittest.TestCase):
             html = Path(out["html"]).read_text(encoding="utf-8")
             self.assertIn("images/page-01.png", html)
             self.assertNotIn("data:image/png;base64,", html)
+
+    def test_zip_export_bundles_link_images_folder(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli("export", "--zip", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(out["delivery"], "zip")
+            z = Path(out["zip"])
+            self.assertTrue(z.is_file())
+            slug = Path(d).resolve().name
+            with zipfile.ZipFile(z) as zf:
+                names = zf.namelist()
+                idx = zf.read("%s/index.html" % slug).decode("utf-8")
+            self.assertIn("%s/index.html" % slug, names)
+            self.assertTrue(any(n.startswith("%s/images/" % slug) for n in names))
+            self.assertIn("images/page-01.png", idx)          # relative ref
+            self.assertNotIn("data:image/png;base64,", idx)   # zip ⇒ link mode
 
     def test_skipped_page_renders_placeholder_not_sentinel(self):
         with helpers.tmp() as td:
@@ -65,6 +83,21 @@ class TestExport(unittest.TestCase):
             self.assertIn("im.decode", html)
             self.assertIn("pointerdown", html)                  # pointer swipe
             self.assertIn("touch-action: pan-y", html)
+
+    def test_viewer_has_recording_print_and_veil(self):
+        # Second sync batch: 我自己读 recording, current-language print, flip veil.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli("export", "--dir", d)
+            self.assertEqual(code, 0)
+            html = Path(out["html"]).read_text(encoding="utf-8")
+            self.assertIn('id="recbtn"', html)                  # 我自己读 button
+            self.assertIn("MediaRecorder", html)                # recording engine
+            self.assertIn("function renderRecPanel", html)
+            self.assertIn("function buildPrint(lang)", html)    # print follows current lang
+            self.assertIn("buildPrint(state.lang)", html)
+            self.assertIn("flipveil", html)                     # flip veil
+            self.assertIn("function setVeil", html)
 
 
 class TestExportSecurity(unittest.TestCase):

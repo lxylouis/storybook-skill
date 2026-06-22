@@ -41,8 +41,8 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
 | `amend-page --page <id> --json '{...}'` | 改某页文字/标题/image_prompt |
 | `regenerate --page <id>` | 清图待重出(自动记失败次数) |
 | `skip --page <id> [--reason ...]` | 跳过反复失败的页 |
-| `finalize` | 校验全书 → delivered → 自动导出 HTML |
-| `export [--link-images]` | (重新)导出 HTML;交付前(`awaiting_outline_confirm`/`illustrating`)也可随时跑来**预览**。大图(2K 以上)建议加 `--link-images` 避免单文件几十 MB |
+| `finalize [--inline]` | 校验全书 → delivered → **默认打包成 `.zip`**(link-images 的 HTML + images/);`--inline` 则出单个自包含 HTML |
+| `export [--link-images] [--zip]` | (重新)导出 HTML;交付前(`awaiting_outline_confirm`/`illustrating`)也可随时跑来**预览**。`--zip` 打包成 link-images 压缩包(自动 link-images);单文件想瘦身可单用 `--link-images` |
 | `doctor` | 环境自检(python/出图配置/模板) |
 
 ## 流程总图
@@ -52,7 +52,7 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
   → 出封面(compose-prompt --page cover → 出图 → save-image --page cover)
   → 给用户看大纲+封面 → 【硬等待用户确认】
   → confirm-outline → 自动整本循环(每页: compose-prompt → 出图 → save-image → next)
-  → finalize → 把 HTML 路径交给用户 → 返修(amend-page/regenerate → export)
+  → finalize → 把 .zip 路径交给用户 → 返修(amend-page/regenerate → export [--zip])
 ```
 
 ## 出图协议(双轨)
@@ -82,8 +82,8 @@ python3 <skill>/scripts/storybook.py <command> --dir <book-dir>
   逐页过,就自然切换成逐页等确认的节奏——无需任何配置。
 - 出图失败:`regenerate --page <id>` 记一次失败并清图,然后重试;**同一页失败
   3 次**(看返回的 failed_attempts)就建议用户 `skip`,别无限重试。
-- `finalize` 之后把 HTML **绝对路径**给用户:双击打开;浏览器打印 = PDF。
-  若文件过大(2K 图较多时可能几十 MB),建议 `export --link-images` 用外部引用替代内嵌。
+- `finalize` 之后把 **`.zip` 绝对路径**给用户:解压后双击文件夹里的 `index.html` 打开;
+  浏览器打印 = PDF。想要「单个文件好分享」就 `finalize --inline`(2K 图较多时可能几十 MB)。
 - 返修:只改文字 → `amend-page` 后直接 `export`(图复用);改了 image_prompt →
   `amend-page` → `regenerate` → 重出图 → `save-image` → `export`;只是图不满意
   → `regenerate` → 重出 → `save-image` → `export`。

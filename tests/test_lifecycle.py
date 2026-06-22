@@ -302,6 +302,36 @@ class TestFinalize(unittest.TestCase):
             self.assertEqual(helpers.read_book(d)["phase"], "delivered")
             self.assertTrue(Path(out["html"]).is_file())
 
+    def test_finalize_default_delivers_zip(self):
+        # Default delivery is a link-images .zip bundle (HTML + images/).
+        import zipfile
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            code, out, _ = helpers.run_cli("finalize", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(out["delivery"], "zip")
+            z = Path(out["zip"])
+            self.assertTrue(z.is_file())
+            slug = Path(d).resolve().name
+            with zipfile.ZipFile(z) as zf:
+                names = zf.namelist()
+                idx = zf.read("%s/index.html" % slug).decode("utf-8")
+            self.assertIn("%s/index.html" % slug, names)
+            self.assertTrue(any(n.startswith("%s/images/" % slug) for n in names))
+            self.assertNotIn("data:image/png;base64,", idx)  # link mode, not inlined
+
+    def test_finalize_inline_single_file(self):
+        # --inline keeps the old one-file deliverable (base64-embedded, no zip).
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating", with_images=True)
+            code, out, _ = helpers.run_cli("finalize", "--inline", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(out["delivery"], "html")
+            self.assertIn("data:image/png;base64,",
+                          Path(out["html"]).read_text(encoding="utf-8"))
+            slug = Path(d).resolve().name
+            self.assertFalse((Path(d) / (slug + ".zip")).exists())
+
     def test_skipped_pages_do_not_block(self):
         with helpers.tmp() as td:
             d = helpers.make_book(td, phase="illustrating", with_images=True)

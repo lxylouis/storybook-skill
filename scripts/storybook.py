@@ -19,6 +19,7 @@ import re
 import shutil
 import sys
 import traceback
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -695,6 +696,26 @@ def _do_export(book_dir, data, inline):
     return out_path
 
 
+def _make_zip(book_dir, html_path):
+    """Bundle a link-images HTML + its images/ into <slug>.zip (atomic write).
+
+    Layout inside the archive: <slug>/index.html + <slug>/images/* — unzipping
+    yields one tidy folder the user double-clicks into. Use only with a
+    link-images export (an inline single file has nothing to bundle)."""
+    slug = Path(book_dir).resolve().name
+    zip_path = Path(book_dir) / ("%s.zip" % slug)
+    images_dir = Path(book_dir) / "images"
+    tmp = zip_path.with_suffix(".zip.tmp")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(str(html_path), arcname="%s/index.html" % slug)
+        if images_dir.is_dir():
+            for img in sorted(images_dir.iterdir()):
+                if img.is_file() and img.suffix.lower() in IMAGE_EXTS:
+                    zf.write(str(img), arcname="%s/images/%s" % (slug, img.name))
+    tmp.replace(zip_path)
+    return zip_path
+
+
 def cmd_finalize(args):
     data = _load_book(args.dir)
     _require_phase(data, "illustrating")
@@ -707,22 +728,52 @@ def cmd_finalize(args):
               current_phase=data.get("phase"))
     data["phase"] = "delivered"
     _write_book(args.dir, data)
-    out_path = _do_export(args.dir, data, inline=True)
+    if args.inline:
+        # Single self-contained HTML (base64-embedded). Handy for tiny books or
+        # one-file sharing; can get large (tens of MB) once 2K images pile up.
+        out_path = _do_export(args.dir, data, inline=True)
+        _emit({
+            "ok": True, "phase": "delivered", "delivery": "html",
+            "page_count": len(data.get("pages", [])),
+            "html": str(out_path.resolve()),
+            "next_action": "Book delivered as ONE self-contained HTML. Give the "
+                           "user this absolute path (double-click to open; Print "
+                           "= PDF). Later revisions: amend-page / regenerate → "
+                           "save-image → export.",
+        })
+    # Default: link-images HTML + images/ bundled into a .zip — the portable
+    # deliverable that stays small even with big illustrations.
+    out_path = _do_export(args.dir, data, inline=False)
+    zip_path = _make_zip(args.dir, out_path)
     _emit({
-        "ok": True, "phase": "delivered",
+        "ok": True, "phase": "delivered", "delivery": "zip",
         "page_count": len(data.get("pages", [])),
+        "zip": str(zip_path.resolve()),
         "html": str(out_path.resolve()),
-        "next_action": "Book delivered! Give the user the HTML path "
-                       "(double-click to open; Print = PDF). Later revisions: "
-                       "amend-page / regenerate → save-image → export.",
+        "next_action": "Book delivered! Give the user the .zip absolute path — "
+                       "unzip and open the folder's index.html (Print = PDF). "
+                       "For a single shareable file instead, run finalize "
+                       "--inline. Later revisions: amend-page / regenerate → "
+                       "save-image → export (--zip to re-bundle).",
     })
 
 
 def cmd_export(args):
     data = _load_book(args.dir)
     _require_phase(data, "awaiting_outline_confirm", "illustrating", "delivered")
-    inline = not args.link_images
+    # --zip bundles link-images HTML + images/ (zipping an inline single file
+    # would be pointless), so it forces link-images regardless of --link-images.
+    inline = not args.link_images and not args.zip
     out_path = _do_export(args.dir, data, inline)
+    if args.zip:
+        zip_path = _make_zip(args.dir, out_path)
+        _emit({
+            "ok": True, "delivery": "zip",
+            "zip": str(zip_path.resolve()), "html": str(out_path.resolve()),
+            "size_bytes": zip_path.stat().st_size,
+            "next_action": "Give the user the .zip absolute path — unzip and "
+                           "open the folder's index.html (Print = PDF).",
+        })
     _emit({
         "ok": True, "html": str(out_path.resolve()),
         "size_bytes": out_path.stat().st_size, "inline_images": inline,
@@ -892,13 +943,18 @@ def build_parser():
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_save_outline)
 
-    p = sub.add_parser("finalize", help="Validate, deliver, and export.")
+    p = sub.add_parser("finalize", help="Validate, deliver, and package.")
+    p.add_argument("--inline", action="store_true",
+                   help="deliver one self-contained HTML instead of the default "
+                        "link-images .zip bundle")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_finalize)
 
     p = sub.add_parser("export", help="Render the self-contained HTML book.")
     p.add_argument("--link-images", action="store_true",
                    help="reference images/ by relative path instead of inlining base64")
+    p.add_argument("--zip", action="store_true",
+                   help="bundle link-images HTML + images/ into <slug>.zip")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_export)
 
