@@ -189,7 +189,11 @@ class FakeImageAPI:
 
 def run_gen(*args, env_extra=None, cwd=None, stdin=None):
     env = dict(os.environ)
-    env.pop("STORYBOOK_IMAGE_API_KEY", None)  # isolate from real env
+    # Isolate from real image-provider settings so tests stay deterministic
+    # on machines that have a working storybook environment configured.
+    for key in list(env):
+        if key.startswith("STORYBOOK_IMAGE_"):
+            env.pop(key, None)
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
@@ -275,7 +279,9 @@ class FakeDashScopeAPI:
 
 def run_gen_ds(*args, env_extra=None, cwd=None, stdin=None):
     env = dict(os.environ)
-    env.pop("STORYBOOK_IMAGE_API_KEY", None)  # isolate from real env
+    for key in list(env):
+        if key.startswith("STORYBOOK_IMAGE_"):
+            env.pop(key, None)
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
