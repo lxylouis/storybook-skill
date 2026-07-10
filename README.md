@@ -1,8 +1,8 @@
 # storybook-skill
 
 AI 绘本工坊的通用 Agent Skill 版:一句话点子 → 大纲与双语旁白(中/英)→
-风格一致的逐页插画 → **自包含 HTML 翻页绘本**(双击即开、中英切换、浏览器
-朗读、打印即 PDF)。符合 [Agent Skills](https://agentskills.io) 开放规范,
+风格一致的逐页插画 → **自包含 HTML 翻页绘本**(中英切换、浏览器朗读、
+绘本放映厅、绘本剧场录制、打印即 PDF)。符合 [Agent Skills](https://agentskills.io) 开放规范,
 可在 Claude Code、OpenClaw、Hermes Agent 等任意兼容宿主中使用。
 Fork 自 FreeDeepAgents 平台的 storybook 活动,状态机与一致性出图策略
 经过实机验证。当前版本吸收了参考活动的结构化资产/cast 机制:先锁角色、
@@ -55,6 +55,14 @@ export STORYBOOK_IMAGE_SIZE=1024x1536
 对你的 agent 说:「给我做一本绘本,讲小狐狸找月亮的故事,水彩风,给 4 岁孩子」。
 流程:大纲+封面 → 你确认 → 自动画完整本 → 得到 `<书目录>/<slug>.html`。
 修改:「第 3 页文字改成…」「第 5 页重画」「换成剪纸风」。
+
+成品阅读器内置两个表演入口:
+
+- **绘本放映厅**:整本自动播放、自动翻页、浏览器朗读。
+- **绘本剧场**:摄像头表演录制,支持并排/画中画/舞台布局,可下载 `.webm` 视频。
+
+摄像头/麦克风通常要求安全上下文;若双击 `file://` 打开无法录制,进解压目录跑
+`python3 -m http.server` 后用本地 http 地址打开。
 
 手动驱动(不经 agent)也可以:
 

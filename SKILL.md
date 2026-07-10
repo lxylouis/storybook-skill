@@ -3,15 +3,16 @@ name: storybook-skill
 description: >
   Create illustrated children's picture books from a one-line idea — outline,
   style-consistent per-page illustrations, bilingual (zh/en) narration, and a
-  self-contained HTML flipbook with read-aloud. 用于制作儿童绘本/图画书/睡前
-  故事书:一句话点子生成大纲、逐页插画与中英双语旁白,导出可分享的翻页 HTML 成品。
+  self-contained HTML flipbook with read-aloud, auto-play Story Cinema, and
+  camera-based Story Theater recording. 用于制作儿童绘本/图画书/睡前故事书:
+  一句话点子生成大纲、逐页插画与中英双语旁白,导出可分享的翻页 HTML 成品。
 ---
 
 # Storybook — AI 绘本工坊(通用 skill)
 
 把用户的一句话故事创意变成 5–12 页的插画绘本:大纲 + 封面经用户确认后,自动逐页
-配图,最终交付**自包含 HTML 翻页绘本**(双击即开、中英切换、浏览器朗读、打印即
-PDF)。
+配图,最终交付**自包含 HTML 翻页绘本**(中英切换、浏览器朗读、绘本放映厅、
+绘本剧场录制、打印即 PDF)。
 
 **一本书 = 一个目录**(`book.json` + `images/` + `<slug>.html`)。状态机、守卫和
 校验全部在 `scripts/storybook.py` 里——**所有状态变更必须经它,绝不手改
@@ -85,9 +86,11 @@ prompt**。然后:
   3 次**(看返回的 failed_attempts)就建议用户 `skip`,别无限重试。
 - `finalize` 之后把 **`.zip` 绝对路径**给用户:解压后双击文件夹里的 `index.html` 打开;
   浏览器打印 = PDF。想要「单个文件好分享」就 `finalize --inline`(2K 图较多时可能几十 MB)。
-- **「我自己读」录音例外**:浏览器只在安全上下文给麦克风,双击 `file://` 打开时录音用不了
-  (面板会提示)。交付时若用户想用录音,告诉他用**本地 http 打开**(进解压目录跑
-  `python3 -m http.server` 再访问)。回放/下载/朗读/翻页音效/打印都不受此限。
+- **录音/剧场例外**:浏览器只在安全上下文给麦克风/摄像头,双击 `file://`
+  打开时「我自己读」和「绘本剧场」可能只能提示不可用或模拟录制。交付时若
+  用户想录音/录像,告诉他用**本地 http 打开**(进解压目录跑
+  `python3 -m http.server` 再访问)。绘本放映厅/回放/下载/朗读/翻页音效/打印
+  不受此限。
 - 返修:只改文字 → `amend-page` 后直接 `export`(图复用);改了 image_prompt →
   `amend-page` → `regenerate` → 重出图 → `save-image` → `export`;只是图不满意
   → `regenerate` → 重出 → `save-image` → `export`。

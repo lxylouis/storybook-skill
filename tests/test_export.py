@@ -99,6 +99,22 @@ class TestExport(unittest.TestCase):
             self.assertIn("flipveil", html)                     # flip veil
             self.assertIn("function setVeil", html)
 
+    def test_viewer_has_cinema_and_theater(self):
+        # Standalone version of upstream Story Cinema / Story Theater:
+        # auto-play whole book, camera performance, canvas compositing, video download.
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            code, out, _ = helpers.run_cli("export", "--dir", d)
+            self.assertEqual(code, 0)
+            html = Path(out["html"]).read_text(encoding="utf-8")
+            self.assertIn('id="cinemabtn"', html)
+            self.assertIn('id="theaterbtn"', html)
+            self.assertIn("function startCinema", html)
+            self.assertIn("function renderPerfSetup", html)
+            self.assertIn("function drawCompositeFrame", html)
+            self.assertIn("captureStream", html)
+            self.assertIn("storybook-theater.webm", html)
+
 
 class TestExportSecurity(unittest.TestCase):
     """XSS hardening for the self-contained, shared-around HTML (C1 + I3)."""

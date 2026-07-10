@@ -209,6 +209,72 @@
   @keyframes rec-blink { 50% { opacity: .25; } }
   @media (prefers-reduced-motion: reduce) { #recpanel .rec-dot { animation: none; } }
 
+  /* ── 绘本放映厅 / 绘本剧场(单文件离线版) ─────────────── */
+  .st-mint { background: var(--mint); border-color: var(--mint-deep); color: #31533f; padding: 9px 18px; font-size: 16px; }
+  .st-coral { background: var(--coral); border-color: var(--coral-deep); color: #FFF8E8; padding: 9px 18px; font-size: 16px; }
+  #theater {
+    position: fixed; inset: 0; z-index: 80; display: none;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(247,197,68,.16), transparent 30%),
+      linear-gradient(180deg, #1f1510, #3b2417 55%, #17100c);
+    color: #FFF8E8; font-family: var(--font-ui);
+  }
+  #theater.open { display: flex; flex-direction: column; }
+  #theaterbar {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    background: rgba(20, 12, 8, .76); box-shadow: 0 4px 18px rgba(0,0,0,.34);
+  }
+  #theater-title { flex: 1; min-width: 0; font-family: var(--font-title); font-weight: 800; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #theaterstage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; }
+  .th-card {
+    width: min(1120px, 100%); height: min(720px, 100%);
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+    gap: 18px; align-items: stretch;
+  }
+  .th-book, .th-cam, .th-review, .th-setup {
+    border-radius: 22px; background: rgba(255,253,244,.08);
+    border: 2px solid rgba(255,248,232,.18); overflow: hidden;
+    box-shadow: 0 14px 40px rgba(0,0,0,.28);
+  }
+  .th-book { display: flex; flex-direction: column; min-width: 0; }
+  .th-art { flex: 1; min-height: 0; display: grid; place-items: center; background: #120c08; }
+  .th-art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .th-art .placeholder { color: rgba(255,248,232,.72); font-family: var(--font-title); text-align: center; font-size: 42px; }
+  .th-caption { padding: 16px 18px; font-family: var(--font-story); font-weight: 800; line-height: 1.65; font-size: clamp(18px, 2.2vw, 28px); background: rgba(0,0,0,.28); }
+  .th-cam { position: relative; min-height: 280px; background: #100a07; display: grid; place-items: center; }
+  .th-cam video { width: 100%; height: 100%; object-fit: cover; }
+  .th-cam .sim { text-align: center; color: rgba(255,248,232,.75); font-weight: 800; }
+  .th-progress { height: 8px; background: rgba(255,248,232,.16); overflow: hidden; }
+  .th-progress i { display: block; height: 100%; width: 0%; background: var(--sun); transition: width .16s linear; }
+  .th-setup, .th-review {
+    width: min(760px, 100%); padding: 24px; text-align: center; display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  }
+  .th-setup h2, .th-review h2 { font-family: var(--font-title); font-size: clamp(26px, 4vw, 44px); margin: 0; }
+  .th-setup p, .th-review p { max-width: 560px; color: rgba(255,248,232,.78); line-height: 1.6; font-weight: 700; }
+  .th-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  .th-layout { display: inline-flex; gap: 6px; padding: 5px; border-radius: 999px; background: rgba(255,248,232,.12); }
+  .th-layout button {
+    border: 0; border-radius: 999px; padding: 8px 12px; cursor: pointer;
+    background: transparent; color: #FFF8E8; font-family: var(--font-title); font-weight: 800;
+  }
+  .th-layout button.on { background: var(--sun); color: #4a2f17; }
+  #theatercanvas { display: none; }
+  #reviewvideo { max-width: min(720px, 100%); max-height: 52vh; border-radius: 18px; background: #000; }
+  #theater.stage-mode .th-card { grid-template-columns: 1fr; }
+  #theater.stage-mode .th-book { position: absolute; left: 22px; top: 76px; width: min(360px, 42vw); height: min(360px, 42vh); z-index: 2; }
+  #theater.stage-mode .th-cam { grid-column: 1; }
+  #theater.pip-mode .th-card { grid-template-columns: 1fr; position: relative; }
+  #theater.pip-mode .th-cam { position: absolute; right: 22px; bottom: 22px; width: min(300px, 34vw); height: min(220px, 28vh); z-index: 2; }
+  #theater.pip-mode .th-book { grid-column: 1; }
+  @media (max-width: 780px) {
+    .th-card { grid-template-columns: 1fr; height: 100%; }
+    #theater.pip-mode .th-cam, #theater.stage-mode .th-book {
+      position: static; width: auto; height: auto;
+    }
+    #theaterbar { flex-wrap: wrap; }
+  }
+
   /* ── 仿真翻页纸(sb-flipsheet) ────────────────────────── */
   #book.flipstage { perspective: 1800px; }
   .flipsheet {
@@ -325,7 +391,7 @@
   #printpages { display: none; }
   @media print {
     @page { size: A4 portrait; margin: 14mm; }
-    body > header, body > main, #doodles { display: none; }
+    body > header, body > main, #doodles, #theater { display: none; }
     body { overflow: visible; background: #fff; }
     body::after { display: none; }
     #printpages { display: block; }
@@ -383,6 +449,12 @@
           <button class="sticker st-sky" id="recbtn" title="录下你自己读这一页 / Record yourself reading">
             🦜 <span id="reclabel">我自己读</span>
           </button>
+          <button class="sticker st-mint" id="cinemabtn" title="自动播放整本绘本 / Auto-play the book">
+            ▶ <span id="cinemalabel">绘本放映厅</span>
+          </button>
+          <button class="sticker st-coral" id="theaterbtn" title="录制你的绘本表演 / Record a story performance">
+            🎬 <span id="theaterlabel">绘本剧场</span>
+          </button>
         </div>
         <div id="recpanel" aria-live="polite"></div>
         <div id="pageno"></div>
@@ -397,6 +469,15 @@
   </button>
 </main>
 <div id="printpages"></div>
+<div id="theater" aria-live="polite">
+  <div id="theaterbar">
+    <div id="theater-title"></div>
+    <div class="th-controls" id="theater-controls"></div>
+    <button class="sticker st-paper" id="theater-close">✕ <span id="theater-close-label">退出</span></button>
+  </div>
+  <div id="theaterstage"></div>
+  <canvas id="theatercanvas" width="1280" height="720"></canvas>
+</div>
 <script>
 "use strict";
 var BOOK = JSON.parse(document.getElementById("book-data").textContent);
@@ -419,7 +500,26 @@ var STR = {
   pauseRec: { zh: "暂停",     en: "Pause" },
   recHint:  { zh: "读出这一页,录下你自己的声音 🎈", en: "Read this page aloud and record your voice 🎈" },
   recOn:    { zh: "录音中",   en: "Recording" },
-  micNo:    { zh: "麦克风不可用——把成品用本地服务器(http)打开才能录音", en: "Mic unavailable — open over http (a local server) to record" }
+  micNo:    { zh: "麦克风不可用——把成品用本地服务器(http)打开才能录音", en: "Mic unavailable — open over http (a local server) to record" },
+  cinema:   { zh: "绘本放映厅", en: "Story Cinema" },
+  theater:  { zh: "绘本剧场", en: "Story Theater" },
+  exit:     { zh: "退出", en: "Exit" },
+  pause:    { zh: "暂停", en: "Pause" },
+  resume:   { zh: "继续", en: "Resume" },
+  restart:  { zh: "从头", en: "Restart" },
+  replay:   { zh: "再看一遍", en: "Watch Again" },
+  startShow:{ zh: "开始表演", en: "Start Show" },
+  enableCam:{ zh: "允许摄像头", en: "Enable Camera" },
+  layout:   { zh: "布局", en: "Layout" },
+  split:    { zh: "并排", en: "Split" },
+  pip:      { zh: "画中画", en: "PiP" },
+  stage:    { zh: "舞台", en: "Stage" },
+  downloadVideo: { zh: "下载视频", en: "Download Video" },
+  cinemaEnd:{ zh: "放映结束啦！", en: "The show is over!" },
+  theaterReady: { zh: "准备好表演了吗？", en: "Ready to perform?" },
+  theaterHint:  { zh: "绘本会自动翻页，你照着配文表演；摄像头会和绘本画面一起录进视频。", en: "The book will turn pages automatically; perform along while the camera and book are recorded together." },
+  camNo:    { zh: "摄像头不可用 · 使用模拟画面", en: "Camera unavailable · simulated" },
+  recordingDone: { zh: "表演录好啦！", en: "Your performance is ready!" }
 };
 var mqDesktop = window.matchMedia("(min-width: 900px) and (orientation: landscape)");
 var mqReduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -531,6 +631,8 @@ function renderChrome() {
   document.getElementById("printlabel").textContent = t(STR.print, state.lang);
   document.getElementById("speaklabel").textContent = t(speaking ? STR.stop : STR.readToMe, state.lang);
   document.getElementById("reclabel").textContent = t(STR.letMeRead, state.lang);
+  document.getElementById("cinemalabel").textContent = t(STR.cinema, state.lang);
+  document.getElementById("theaterlabel").textContent = t(STR.theater, state.lang);
   document.getElementById("prevbtn").disabled = state.index === 0;
   document.getElementById("nextbtn").disabled = state.index >= TOTAL - 1;
 }
@@ -765,6 +867,10 @@ if (!window.speechSynthesis) {
 
 /* 键盘(设计稿:←→ 与 ↑↓ 都翻页)+ 触屏滑动 */
 document.addEventListener("keydown", function (e) {
+  if (document.getElementById("theater").classList.contains("open")) {
+    if (e.key === "Escape") { closePerformance(); }
+    return;
+  }
   if (e.key === "ArrowRight" || e.key === "ArrowDown") { go(1); }
   else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { go(-1); }
 });
@@ -924,6 +1030,354 @@ document.getElementById("recbtn").onclick = function () {
   if (!recOpen) { stopRecActive(); }
   renderRecPanel();
 };
+
+/* ── 绘本放映厅 / 绘本剧场(自动播放 + 摄像头合成录制) ─────── */
+var perf = {
+  mode: "", page: 0, layout: "split", timer: null, tick: null,
+  startedAt: 0, dur: 0, remaining: 0, paused: false, done: false,
+  stream: null, video: null, recorder: null, chunks: [], clipUrl: "",
+  drawRaf: null, canvasStream: null, currentImg: null, sim: false
+};
+
+function perfText(i) {
+  var p = BOOK.pages[i] || {};
+  if (p.page_no === 0) {
+    var title = t(BOOK.title, state.lang);
+    return state.lang === "zh" ? "《" + title + "》，" + (BOOK.author || "") + " 著。" : '"' + title + '", by ' + (BOOK.author || "") + ".";
+  }
+  return t(p.narration, state.lang);
+}
+function perfCaption(i) {
+  var p = BOOK.pages[i] || {};
+  return p.page_no === 0 ? t(BOOK.title, state.lang) : t(p.narration, state.lang);
+}
+function perfDuration(text) {
+  var s = (text || "").trim();
+  if (!s) { return 2600; }
+  var ms = state.lang === "zh" ? (s.length / 4.0) * 1000 : (s.split(/\s+/).length / 2.3) * 1000;
+  return Math.max(2600, Math.round(ms + 700));
+}
+function perfPageImage(i) {
+  var p = BOOK.pages[i] || {};
+  if (!p.image) { return '<div class="placeholder">🎨<small>No picture</small></div>'; }
+  return '<img id="th-img" src="' + esc(p.image) + '" alt="">';
+}
+function setPerfProgress(ratio) {
+  var bar = document.querySelector(".th-progress i");
+  if (bar) { bar.style.width = Math.max(0, Math.min(100, ratio * 100)) + "%"; }
+}
+function stopPerfTimers() {
+  if (perf.timer) { clearTimeout(perf.timer); perf.timer = null; }
+  if (perf.tick) { clearInterval(perf.tick); perf.tick = null; }
+}
+function stopPerfSpeech() {
+  if (window.speechSynthesis) { try { speechSynthesis.cancel(); } catch (e) { /* noop */ } }
+}
+function loadPerfImage(i) {
+  var p = BOOK.pages[i] || {};
+  perf.currentImg = null;
+  if (!p.image) { return; }
+  var img = new Image();
+  img.onload = function () { perf.currentImg = img; };
+  img.onerror = function () { perf.currentImg = null; };
+  img.src = p.image;
+}
+function renderPerfControls() {
+  var c = document.getElementById("theater-controls");
+  var html = "";
+  if (perf.mode === "record" && perf.page === 0 && !perf.recorder && !perf.clipUrl) {
+    html += '<span class="th-layout" aria-label="' + esc(t(STR.layout, state.lang)) + '">' +
+      ["split", "pip", "stage"].map(function (l) {
+        return '<button data-layout="' + l + '" class="' + (perf.layout === l ? "on" : "") + '">' + esc(t(STR[l], state.lang)) + "</button>";
+      }).join("") + "</span>";
+  }
+  if (!perf.done && (perf.mode === "cinema" || perf.recorder)) {
+    html += '<button class="sticker st-paper" id="th-pause">' + esc(t(perf.paused ? STR.resume : STR.pause, state.lang)) + "</button>";
+  }
+  html += '<button class="sticker st-paper" id="th-restart">↻ ' + esc(t(STR.restart, state.lang)) + "</button>";
+  c.innerHTML = html;
+  Array.prototype.forEach.call(c.querySelectorAll("[data-layout]"), function (btn) {
+    btn.onclick = function () { perf.layout = btn.getAttribute("data-layout"); renderPerfSetup(); };
+  });
+  var pause = document.getElementById("th-pause");
+  if (pause) { pause.onclick = function () { perf.paused ? resumePerformance() : pausePerformance(); }; }
+  var restart = document.getElementById("th-restart");
+  if (restart) { restart.onclick = function () { perf.mode === "record" ? renderPerfSetup() : startCinema(); }; }
+}
+function renderPerfShell(title) {
+  var root = document.getElementById("theater");
+  root.classList.add("open");
+  root.classList.toggle("pip-mode", perf.layout === "pip");
+  root.classList.toggle("stage-mode", perf.layout === "stage");
+  document.getElementById("theater-title").textContent = title;
+  document.getElementById("theater-close-label").textContent = t(STR.exit, state.lang);
+  renderPerfControls();
+}
+function renderPerfPage() {
+  var title = perf.mode === "cinema" ? t(STR.cinema, state.lang) : t(STR.theater, state.lang);
+  renderPerfShell(title + " · " + (perf.page + 1) + " / " + TOTAL);
+  var stage = document.getElementById("theaterstage");
+  var cam = "";
+  if (perf.mode === "record") {
+    cam = '<div class="th-cam">' +
+      (perf.stream ? '<video id="th-video" muted playsinline autoplay></video>' : '<div class="sim">🧒<br>' + esc(t(STR.camNo, state.lang)) + "</div>") +
+      "</div>";
+  }
+  stage.innerHTML = '<div class="th-card">' +
+    '<div class="th-book"><div class="th-art">' + perfPageImage(perf.page) + '</div><div class="th-caption">' + esc(perfCaption(perf.page)) + '</div><div class="th-progress"><i></i></div></div>' +
+    cam + "</div>";
+  if (perf.stream) {
+    var v = document.getElementById("th-video");
+    if (v) { v.srcObject = perf.stream; perf.video = v; }
+  }
+  loadPerfImage(perf.page);
+}
+function schedulePerfPage(audible) {
+  stopPerfTimers();
+  perf.paused = false;
+  perf.done = false;
+  perf.dur = perfDuration(perfText(perf.page));
+  perf.remaining = perf.dur;
+  perf.startedAt = Date.now();
+  setPerfProgress(0);
+  renderPerfControls();
+  var finished = false;
+  function advance() {
+    if (finished || perf.paused) { return; }
+    finished = true;
+    stopPerfTimers();
+    if (perf.page >= TOTAL - 1) { finishPerformance(); return; }
+    perf.page += 1;
+    renderPerfPage();
+    schedulePerfPage(audible);
+  }
+  perf.tick = setInterval(function () {
+    var elapsed = Date.now() - perf.startedAt;
+    setPerfProgress(Math.min(1, elapsed / perf.dur));
+  }, 120);
+  perf.timer = setTimeout(advance, perf.dur + 400);
+  if (audible && window.speechSynthesis) {
+    stopPerfSpeech();
+    var u = new SpeechSynthesisUtterance(perfText(perf.page));
+    u.lang = state.lang === "zh" ? "zh-CN" : "en-US";
+    var v = state.lang === "zh" ? _voiceCache.zh : _voiceCache.en;
+    if (v) { u.voice = v; }
+    u.rate = 0.92;
+    u.onend = advance;
+    u.onerror = function () {};
+    speechSynthesis.speak(u);
+  }
+}
+function pausePerformance() {
+  if (perf.paused || perf.done) { return; }
+  perf.paused = true;
+  perf.remaining = Math.max(400, perf.dur - (Date.now() - perf.startedAt));
+  stopPerfTimers();
+  if (window.speechSynthesis) { try { speechSynthesis.pause(); } catch (e) { /* noop */ } }
+  if (perf.recorder && perf.recorder.state === "recording") { try { perf.recorder.pause(); } catch (e) { /* noop */ } }
+  renderPerfControls();
+}
+function resumePerformance() {
+  if (!perf.paused || perf.done) { return; }
+  perf.paused = false;
+  perf.dur = perf.remaining;
+  perf.startedAt = Date.now();
+  if (window.speechSynthesis) { try { speechSynthesis.resume(); } catch (e) { /* noop */ } }
+  if (perf.recorder && perf.recorder.state === "paused") { try { perf.recorder.resume(); } catch (e) { /* noop */ } }
+  perf.timer = setTimeout(function () {
+    if (perf.page >= TOTAL - 1) { finishPerformance(); return; }
+    perf.page += 1; renderPerfPage(); schedulePerfPage(perf.mode === "cinema");
+  }, perf.remaining + 400);
+  perf.tick = setInterval(function () {
+    var elapsed = Date.now() - perf.startedAt;
+    setPerfProgress(Math.min(1, elapsed / perf.dur));
+  }, 120);
+  renderPerfControls();
+}
+function startCinema() {
+  perf.mode = "cinema";
+  perf.page = 0;
+  perf.done = false;
+  perf.layout = "split";
+  stopSpeech();
+  stopRecActive();
+  renderPerfPage();
+  schedulePerfPage(true);
+}
+function renderPerfSetup() {
+  perf.mode = "record";
+  perf.page = 0;
+  perf.done = false;
+  stopPerfTimers();
+  stopPerfSpeech();
+  stopPerfDrawing();
+  if (perf.clipUrl) { URL.revokeObjectURL(perf.clipUrl); perf.clipUrl = ""; }
+  renderPerfShell(t(STR.theater, state.lang));
+  document.getElementById("theaterstage").innerHTML =
+    '<div class="th-setup"><h2>🎬 ' + esc(t(STR.theaterReady, state.lang)) + '</h2>' +
+    '<p>' + esc(t(STR.theaterHint, state.lang)) + '</p>' +
+    '<div class="th-controls"><button class="sticker st-coral" id="th-start">' + esc(t(STR.startShow, state.lang)) + '</button>' +
+    '<button class="sticker st-paper" id="th-cam">' + esc(t(STR.enableCam, state.lang)) + '</button></div></div>';
+  document.getElementById("th-start").onclick = startRecordShow;
+  document.getElementById("th-cam").onclick = enablePerfCamera;
+}
+function enablePerfCamera(cb) {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    perf.sim = true; if (cb) { cb(); } return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 1280 }, audio: true }).then(function (s) {
+    perf.stream = s; perf.sim = false; if (cb) { cb(); }
+  }).catch(function () {
+    perf.stream = null; perf.sim = true; if (cb) { cb(); }
+  });
+}
+function startRecordShow() {
+  enablePerfCamera(function () {
+    perf.page = 0;
+    renderPerfPage();
+    startPerfRecorder();
+    schedulePerfPage(false);
+  });
+}
+function stopPerfDrawing() {
+  if (perf.drawRaf) { cancelAnimationFrame(perf.drawRaf); perf.drawRaf = null; }
+}
+function drawContain(ctx, img, x, y, w, h, bg) {
+  ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
+  if (!img || !img.naturalWidth || !img.naturalHeight) { return; }
+  var s = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  var dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+  try { ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh); } catch (e) { /* tainted */ }
+}
+function drawCover(ctx, video, x, y, w, h) {
+  if (!video || !video.videoWidth || !video.videoHeight) { return false; }
+  var s = Math.max(w / video.videoWidth, h / video.videoHeight);
+  var sw = w / s, sh = h / s;
+  try { ctx.drawImage(video, (video.videoWidth - sw) / 2, (video.videoHeight - sh) / 2, sw, sh, x, y, w, h); return true; }
+  catch (e) { return false; }
+}
+function drawWrapped(ctx, text, x, y, maxW, fontPx, maxLines) {
+  ctx.save();
+  ctx.font = "700 " + fontPx + "px " + getComputedStyle(document.body).fontFamily;
+  ctx.fillStyle = "#fff8e8"; ctx.textBaseline = "top";
+  ctx.shadowColor = "rgba(0,0,0,.65)"; ctx.shadowBlur = 6;
+  var line = "", lines = [], chars = Array.from(text || "");
+  chars.forEach(function (ch) {
+    if (ctx.measureText(line + ch).width > maxW && line) { lines.push(line); line = ch; }
+    else { line += ch; }
+  });
+  if (line) { lines.push(line); }
+  lines.slice(0, maxLines).forEach(function (ln, i) {
+    if (i === maxLines - 1 && lines.length > maxLines) { ln = ln.replace(/.$/, "…"); }
+    ctx.fillText(ln, x, y + i * fontPx * 1.35);
+  });
+  ctx.restore();
+}
+function drawSim(ctx, x, y, w, h) {
+  ctx.fillStyle = "#1c1410"; ctx.fillRect(x, y, w, h);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "52px sans-serif"; ctx.fillText("🧒", x + w / 2, y + h / 2 - 10);
+  ctx.fillStyle = "rgba(255,248,232,.72)"; ctx.font = "700 18px sans-serif";
+  ctx.fillText(t(STR.camNo, state.lang), x + w / 2, y + h / 2 + 44);
+}
+function drawCompositeFrame() {
+  var cv = document.getElementById("theatercanvas");
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height, txt = perfCaption(perf.page);
+  ctx.fillStyle = "#241a14"; ctx.fillRect(0, 0, W, H);
+  function cam(x, y, w, h) {
+    if (!(perf.video && drawCover(ctx, perf.video, x, y, w, h))) { drawSim(ctx, x, y, w, h); }
+  }
+  if (perf.layout === "stage") {
+    cam(0, 0, W, H);
+    ctx.fillStyle = "rgba(26,18,13,.76)"; ctx.fillRect(24, 24, 390, 330);
+    drawContain(ctx, perf.currentImg, 40, 40, 358, 220, "#120c08");
+    drawWrapped(ctx, txt, 40, 276, 352, 20, 2);
+  } else if (perf.layout === "pip") {
+    drawContain(ctx, perf.currentImg, 0, 0, W, H, "#120c08");
+    drawWrapped(ctx, txt, 30, H - 132, 720, 28, 3);
+    cam(W - 332, H - 252, 300, 224);
+  } else {
+    drawContain(ctx, perf.currentImg, 24, 24, 584, H - 160, "#120c08");
+    drawWrapped(ctx, txt, 32, H - 124, 560, 26, 3);
+    cam(640, 24, W - 664, H - 48);
+  }
+}
+function startPerfDrawing() {
+  stopPerfDrawing();
+  function loop() {
+    drawCompositeFrame();
+    perf.drawRaf = requestAnimationFrame(loop);
+  }
+  loop();
+}
+function startPerfRecorder() {
+  perf.chunks = [];
+  var cv = document.getElementById("theatercanvas");
+  var stream = cv.captureStream ? cv.captureStream(30) : null;
+  if (!stream) { return; }
+  if (perf.stream) {
+    perf.stream.getAudioTracks().forEach(function (tr) { stream.addTrack(tr); });
+  }
+  perf.canvasStream = stream;
+  startPerfDrawing();
+  if (!window.MediaRecorder) { return; }
+  try {
+    var rec = new MediaRecorder(stream);
+    perf.recorder = rec;
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) { perf.chunks.push(e.data); } };
+    rec.onstop = function () {
+      var blob = new Blob(perf.chunks, { type: rec.mimeType || "video/webm" });
+      if (perf.clipUrl) { URL.revokeObjectURL(perf.clipUrl); }
+      perf.clipUrl = URL.createObjectURL(blob);
+      renderPerfReview();
+    };
+    rec.start();
+  } catch (e) { perf.recorder = null; }
+}
+function finishPerformance() {
+  perf.done = true;
+  stopPerfTimers();
+  stopPerfSpeech();
+  setPerfProgress(1);
+  if (perf.mode === "record") {
+    stopPerfDrawing();
+    if (perf.recorder && perf.recorder.state !== "inactive") {
+      try { perf.recorder.stop(); } catch (e) { renderPerfReview(); }
+    } else { renderPerfReview(); }
+  } else {
+    renderPerfShell(t(STR.cinema, state.lang));
+    document.getElementById("theaterstage").innerHTML =
+      '<div class="th-review"><h2>🎞️ ' + esc(t(STR.cinemaEnd, state.lang)) + '</h2>' +
+      '<div class="th-controls"><button class="sticker st-mint" id="th-again">▶ ' + esc(t(STR.replay, state.lang)) + '</button></div></div>';
+    document.getElementById("th-again").onclick = startCinema;
+  }
+}
+function renderPerfReview() {
+  renderPerfShell(t(STR.theater, state.lang));
+  var video = perf.clipUrl ? '<video id="reviewvideo" src="' + esc(perf.clipUrl) + '" controls playsinline></video>' : '<p>' + esc(t(STR.camNo, state.lang)) + '</p>';
+  document.getElementById("theaterstage").innerHTML =
+    '<div class="th-review"><h2>🌟 ' + esc(t(STR.recordingDone, state.lang)) + '</h2>' + video +
+    '<div class="th-controls">' +
+      (perf.clipUrl ? '<a class="sticker st-coral" download="storybook-theater.webm" href="' + esc(perf.clipUrl) + '">⬇ ' + esc(t(STR.downloadVideo, state.lang)) + '</a>' : '') +
+      '<button class="sticker st-paper" id="th-redo">↻ ' + esc(t(STR.restart, state.lang)) + '</button></div></div>';
+  var redo = document.getElementById("th-redo");
+  if (redo) { redo.onclick = renderPerfSetup; }
+}
+function closePerformance() {
+  stopPerfTimers();
+  stopPerfSpeech();
+  stopPerfDrawing();
+  if (perf.recorder && perf.recorder.state !== "inactive") { try { perf.recorder.stop(); } catch (e) { /* noop */ } }
+  if (perf.stream) { perf.stream.getTracks().forEach(function (tr) { tr.stop(); }); }
+  if (perf.canvasStream) { perf.canvasStream.getTracks().forEach(function (tr) { tr.stop(); }); }
+  perf.stream = null; perf.video = null; perf.recorder = null; perf.canvasStream = null;
+  document.getElementById("theater").classList.remove("open", "pip-mode", "stage-mode");
+  document.getElementById("theaterstage").innerHTML = "";
+}
+document.getElementById("cinemabtn").onclick = startCinema;
+document.getElementById("theaterbtn").onclick = renderPerfSetup;
+document.getElementById("theater-close").onclick = closePerformance;
 
 buildDoodles();
 renderChrome();
