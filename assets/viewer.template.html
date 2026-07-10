@@ -250,14 +250,21 @@
     border: 2px solid rgba(255,248,232,.18); overflow: hidden;
     box-shadow: 0 14px 40px rgba(0,0,0,.28);
   }
-  .th-book { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
-  .th-art { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; place-items: center; background: #120c08; }
+  .th-book {
+    display: grid; grid-template-rows: minmax(0, 1fr) auto 8px;
+    min-width: 0; min-height: 0; height: 100%; background: rgba(18,12,8,.88);
+  }
+  .th-art {
+    min-height: 0; overflow: hidden; display: grid; place-items: center;
+    padding: clamp(10px, 1.4vh, 18px); background: #120c08;
+  }
   .th-art img { width: 100%; height: 100%; object-fit: contain; }
   .th-art .placeholder { color: rgba(255,248,232,.72); font-family: var(--font-title); text-align: center; font-size: 42px; }
   .th-caption {
-    flex: 0 0 auto; max-height: 28%; overflow: auto;
-    padding: 14px 18px; font-family: var(--font-story); font-weight: 800;
-    line-height: 1.55; font-size: clamp(16px, 2vw, 24px); background: rgba(0,0,0,.28);
+    max-height: clamp(88px, 21vh, 154px); overflow: auto;
+    padding: 12px 18px; font-family: var(--font-story); font-weight: 800;
+    line-height: 1.5; font-size: clamp(15px, 1.65vw, 22px);
+    background: rgba(0,0,0,.36); border-top: 1px solid rgba(255,248,232,.1);
   }
   .th-cam { position: relative; min-height: 0; height: 100%; background: #100a07; display: grid; place-items: center; }
   .th-cam video { width: 100%; height: 100%; object-fit: cover; }
@@ -272,6 +279,7 @@
   .th-setup p, .th-review p { max-width: 560px; color: rgba(255,248,232,.78); line-height: 1.6; font-weight: 700; }
   .th-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
   .th-layout { display: inline-flex; gap: 6px; padding: 5px; border-radius: 999px; background: rgba(255,248,232,.12); }
+  .th-layout-choice { margin: 2px 0 4px; }
   .th-layout button {
     border: 0; border-radius: 999px; padding: 8px 12px; cursor: pointer;
     background: transparent; color: #FFF8E8; font-family: var(--font-title); font-weight: 800;
@@ -280,7 +288,7 @@
   #theatercanvas { display: none; }
   #reviewvideo { max-width: min(720px, 100%); max-height: 52vh; border-radius: 18px; background: #000; }
   #theater.stage-mode .th-card { grid-template-columns: 1fr; }
-  #theater.stage-mode .th-book { position: absolute; left: 22px; top: 76px; width: min(360px, 42vw); height: min(360px, 42vh); z-index: 2; }
+  #theater.stage-mode .th-book { position: absolute; left: 22px; top: 22px; width: min(380px, 42vw); height: min(340px, 44vh); z-index: 2; }
   #theater.stage-mode .th-cam { grid-column: 1; }
   #theater.pip-mode .th-card { grid-template-columns: 1fr; position: relative; }
   #theater.pip-mode .th-cam { position: absolute; right: 22px; bottom: 22px; width: min(300px, 34vw); height: min(220px, 28vh); z-index: 2; }
@@ -1055,7 +1063,7 @@ document.getElementById("recbtn").onclick = function () {
 /* ── 绘本放映厅 / 绘本剧场(自动播放 + 摄像头合成录制) ─────── */
 var perf = {
   mode: "", page: 0, layout: "split", timer: null, tick: null,
-  startedAt: 0, dur: 0, remaining: 0, paused: false, done: false,
+  startedAt: 0, dur: 0, remaining: 0, progress: 0, paused: false, done: false,
   recording: false, session: 0,
   stream: null, video: null, recorder: null, chunks: [], clipUrl: "",
   drawRaf: null, canvasStream: null, currentImg: null, sim: false
@@ -1085,8 +1093,9 @@ function perfPageImage(i) {
   return '<img id="th-img" src="' + esc(p.image) + '" alt="">';
 }
 function setPerfProgress(ratio) {
+  perf.progress = Math.max(0, Math.min(1, ratio));
   var bar = document.querySelector(".th-progress i");
-  if (bar) { bar.style.width = Math.max(0, Math.min(100, ratio * 100)) + "%"; }
+  if (bar) { bar.style.width = (perf.progress * 100) + "%"; }
 }
 function stopPerfTimers() {
   if (perf.timer) { clearTimeout(perf.timer); perf.timer = null; }
@@ -1142,12 +1151,6 @@ function loadPerfImage(i) {
 function renderPerfControls() {
   var c = document.getElementById("theater-controls");
   var html = "";
-  if (perf.mode === "record" && perf.page === 0 && !perf.recorder && !perf.clipUrl) {
-    html += '<span class="th-layout" aria-label="' + esc(t(STR.layout, state.lang)) + '">' +
-      ["split", "pip", "stage"].map(function (l) {
-        return '<button data-layout="' + l + '" class="' + (perf.layout === l ? "on" : "") + '">' + esc(t(STR[l], state.lang)) + "</button>";
-      }).join("") + "</span>";
-  }
   var isRecording = perf.mode === "record" && perf.recording && !perf.done;
   if (!perf.done && (perf.mode === "cinema" || isRecording || perf.recorder)) {
     html += '<button class="sticker st-paper" id="th-pause">' + esc(t(perf.paused ? STR.resume : STR.pause, state.lang)) + "</button>";
@@ -1157,15 +1160,18 @@ function renderPerfControls() {
   }
   html += '<button class="sticker st-paper" id="th-restart">↻ ' + esc(t(STR.restart, state.lang)) + "</button>";
   c.innerHTML = html;
-  Array.prototype.forEach.call(c.querySelectorAll("[data-layout]"), function (btn) {
-    btn.onclick = function () { perf.layout = btn.getAttribute("data-layout"); renderPerfSetup(); };
-  });
   var pause = document.getElementById("th-pause");
   if (pause) { pause.onclick = function () { perf.paused ? resumePerformance() : pausePerformance(); }; }
   var finish = document.getElementById("th-finish");
   if (finish) { finish.onclick = finishPerformance; }
   var restart = document.getElementById("th-restart");
   if (restart) { restart.onclick = function () { perf.mode === "record" ? renderPerfSetup() : startCinema(); }; }
+}
+function perfLayoutButtons() {
+  return '<span class="th-layout th-layout-choice" aria-label="' + esc(t(STR.layout, state.lang)) + '">' +
+    ["split", "pip", "stage"].map(function (l) {
+      return '<button data-setup-layout="' + l + '" class="' + (perf.layout === l ? "on" : "") + '">' + esc(t(STR[l], state.lang)) + "</button>";
+    }).join("") + "</span>";
 }
 function renderPerfShell(title) {
   var root = document.getElementById("theater");
@@ -1308,8 +1314,12 @@ function renderPerfSetup() {
   document.getElementById("theaterstage").innerHTML =
     '<div class="th-setup"><h2>🎬 ' + esc(t(STR.theaterReady, state.lang)) + '</h2>' +
     '<p>' + esc(t(STR.theaterHint, state.lang)) + '</p>' +
+    perfLayoutButtons() +
     '<div class="th-controls"><button class="sticker st-coral" id="th-start">' + esc(t(STR.startShow, state.lang)) + '</button>' +
     '<button class="sticker st-paper" id="th-cam">' + esc(t(STR.enableCam, state.lang)) + '</button></div></div>';
+  Array.prototype.forEach.call(document.querySelectorAll("[data-setup-layout]"), function (btn) {
+    btn.onclick = function () { perf.layout = btn.getAttribute("data-setup-layout"); renderPerfSetup(); };
+  });
   document.getElementById("th-start").onclick = startRecordShow;
   document.getElementById("th-cam").onclick = enablePerfCamera;
 }
@@ -1344,8 +1354,7 @@ function startRecordShow() {
     renderPerfPage();
     waitForPerfVideoReady(session, function () {
       if (session !== perf.session) { return; }
-      startPerfRecorder(session);
-      schedulePerfPage(false);
+      if (startPerfRecorder(session)) { schedulePerfPage(false); }
     });
   });
 }
@@ -1390,28 +1399,102 @@ function drawSim(ctx, x, y, w, h) {
   ctx.fillStyle = "rgba(255,248,232,.72)"; ctx.font = "700 18px sans-serif";
   ctx.fillText(t(STR.camNo, state.lang), x + w / 2, y + h / 2 + 44);
 }
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawPanelFrame(ctx, rect, radius) {
+  ctx.save();
+  roundRect(ctx, rect.x, rect.y, rect.w, rect.h, radius);
+  ctx.fillStyle = "rgba(255,253,244,.08)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,248,232,.20)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.clip();
+}
+function drawBookPanel(ctx, rect, text, compact) {
+  var pad = compact ? 10 : 16;
+  var barH = compact ? 5 : 7;
+  var capH = Math.round(Math.max(compact ? 64 : 100, Math.min(rect.h * (compact ? .32 : .23), compact ? 96 : 148)));
+  if (rect.h - capH - barH < rect.h * .54) { capH = Math.round(rect.h * .20); }
+  var artH = rect.h - capH - barH;
+  drawPanelFrame(ctx, rect, compact ? 18 : 24);
+  drawContain(ctx, perf.currentImg, rect.x + pad, rect.y + pad, rect.w - pad * 2, artH - pad * 2, "#120c08");
+  ctx.fillStyle = "rgba(0,0,0,.46)";
+  ctx.fillRect(rect.x, rect.y + artH, rect.w, capH);
+  drawWrapped(ctx, text, rect.x + pad + 4, rect.y + artH + (compact ? 12 : 16), rect.w - pad * 2 - 8, compact ? 18 : 26, compact ? 2 : 3);
+  ctx.fillStyle = "rgba(255,248,232,.18)";
+  ctx.fillRect(rect.x, rect.y + rect.h - barH, rect.w, barH);
+  ctx.fillStyle = "#F7C544";
+  ctx.fillRect(rect.x, rect.y + rect.h - barH, rect.w * perf.progress, barH);
+  ctx.restore();
+}
+function drawCameraPanel(ctx, rect, fullBleed) {
+  if (fullBleed) {
+    if (!(perf.video && drawCover(ctx, perf.video, rect.x, rect.y, rect.w, rect.h))) { drawSim(ctx, rect.x, rect.y, rect.w, rect.h); }
+    return;
+  }
+  drawPanelFrame(ctx, rect, 24);
+  if (!(perf.video && drawCover(ctx, perf.video, rect.x, rect.y, rect.w, rect.h))) { drawSim(ctx, rect.x, rect.y, rect.w, rect.h); }
+  ctx.restore();
+}
+function perfCanvasLayout(W, H) {
+  if (perf.layout === "stage") {
+    return {
+      camera: { x: 0, y: 0, w: W, h: H },
+      book: { x: 32, y: 32, w: Math.round(W * .31), h: Math.round(H * .42) },
+      compactBook: true, fullBleedCamera: true
+    };
+  }
+  if (perf.layout === "pip") {
+    return {
+      book: { x: 46, y: 28, w: W - 92, h: H - 56 },
+      camera: { x: W - 376, y: H - 260, w: 330, h: 224 },
+      compactBook: false, fullBleedCamera: false
+    };
+  }
+  var margin = 28, gap = 24, panelH = H - margin * 2, panelW = Math.round((W - margin * 2 - gap) / 2);
+  return {
+    book: { x: margin, y: margin, w: panelW, h: panelH },
+    camera: { x: margin + panelW + gap, y: margin, w: panelW, h: panelH },
+    compactBook: false, fullBleedCamera: false
+  };
+}
 function drawCompositeFrame() {
   var cv = document.getElementById("theatercanvas");
   var ctx = cv.getContext("2d");
   var W = cv.width, H = cv.height, txt = perfCaption(perf.page);
-  ctx.fillStyle = "#241a14"; ctx.fillRect(0, 0, W, H);
-  function cam(x, y, w, h) {
-    if (!(perf.video && drawCover(ctx, perf.video, x, y, w, h))) { drawSim(ctx, x, y, w, h); }
-  }
+  var layout = perfCanvasLayout(W, H);
+  var grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, "#1f1510");
+  grad.addColorStop(.55, "#3b2417");
+  grad.addColorStop(1, "#17100c");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
   if (perf.layout === "stage") {
-    cam(0, 0, W, H);
-    ctx.fillStyle = "rgba(26,18,13,.76)"; ctx.fillRect(24, 24, 390, 330);
-    drawContain(ctx, perf.currentImg, 40, 40, 358, 220, "#120c08");
-    drawWrapped(ctx, txt, 40, 276, 352, 20, 2);
+    drawCameraPanel(ctx, layout.camera, true);
+    drawBookPanel(ctx, layout.book, txt, true);
   } else if (perf.layout === "pip") {
-    drawContain(ctx, perf.currentImg, 0, 0, W, H, "#120c08");
-    drawWrapped(ctx, txt, 30, H - 132, 720, 28, 3);
-    cam(W - 332, H - 252, 300, 224);
+    drawBookPanel(ctx, layout.book, txt, false);
+    drawCameraPanel(ctx, layout.camera, false);
   } else {
-    drawContain(ctx, perf.currentImg, 24, 24, 584, H - 160, "#120c08");
-    drawWrapped(ctx, txt, 32, H - 124, 560, 26, 3);
-    cam(640, 24, W - 664, H - 48);
+    drawBookPanel(ctx, layout.book, txt, false);
+    drawCameraPanel(ctx, layout.camera, false);
   }
+}
+function perfRecorderOptions() {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) { return {}; }
+  var types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  for (var i = 0; i < types.length; i++) {
+    if (MediaRecorder.isTypeSupported(types[i])) { return { mimeType: types[i] }; }
+  }
+  return {};
 }
 function startPerfDrawing() {
   stopPerfDrawing();
@@ -1425,16 +1508,26 @@ function startPerfRecorder(session) {
   perf.chunks = [];
   var cv = document.getElementById("theatercanvas");
   var stream = cv.captureStream ? cv.captureStream(30) : null;
-  if (!stream) { return; }
+  if (!stream) {
+    perf.recording = false;
+    renderPerfReview();
+    return false;
+  }
   if (perf.stream) {
     perf.stream.getAudioTracks().forEach(function (tr) { stream.addTrack(tr); });
   }
   perf.canvasStream = stream;
   drawCompositeFrame();
   startPerfDrawing();
-  if (!window.MediaRecorder) { return; }
+  if (!window.MediaRecorder) {
+    stopPerfDrawing();
+    stopPerfCanvasStream();
+    perf.recording = false;
+    renderPerfReview();
+    return false;
+  }
   try {
-    var rec = new MediaRecorder(stream);
+    var rec = new MediaRecorder(stream, perfRecorderOptions());
     perf.recorder = rec;
     rec.ondataavailable = function (e) { if (e.data && e.data.size) { perf.chunks.push(e.data); } };
     rec.onstop = function () {
@@ -1444,11 +1537,19 @@ function startPerfRecorder(session) {
       perf.recording = false;
       var blob = new Blob(perf.chunks, { type: rec.mimeType || "video/webm" });
       revokePerfClip();
-      perf.clipUrl = URL.createObjectURL(blob);
+      if (blob.size) { perf.clipUrl = URL.createObjectURL(blob); }
       renderPerfReview();
     };
     rec.start(250);
-  } catch (e) { perf.recorder = null; }
+    return true;
+  } catch (e) {
+    stopPerfDrawing();
+    stopPerfCanvasStream();
+    perf.recorder = null;
+    perf.recording = false;
+    renderPerfReview();
+    return false;
+  }
 }
 function finishPerformance() {
   perf.done = true;
@@ -1458,6 +1559,7 @@ function finishPerformance() {
   if (perf.mode === "record") {
     drawCompositeFrame();
     if (perf.recorder && perf.recorder.state !== "inactive") {
+      try { perf.recorder.requestData(); } catch (e) { /* noop */ }
       try { perf.recorder.stop(); } catch (e) {
         stopPerfDrawing();
         stopPerfCanvasStream();
