@@ -65,6 +65,8 @@ def base_book(phase="outlining", n_body=4, with_images=False):
         "narration": {"zh": "封面", "en": "Cover"},
         "image_prompt": "fox under moon, title mood, weight in upper two thirds",
         "image_file": "images/cover.png" if with_images else "",
+        "image_history": [],
+        "cast": [],
         "failed_attempts": 0,
     }]
     for i in range(1, n_body + 1):
@@ -74,6 +76,8 @@ def base_book(phase="outlining", n_body=4, with_images=False):
             "narration": {"zh": "嗖——第%d页。" % i, "en": "Whoosh — page %d." % i},
             "image_prompt": "fox walks on path, scene %d" % i,
             "image_file": "images/page-%02d.png" % i if with_images else "",
+            "image_history": [],
+            "cast": [],
             "failed_attempts": 0,
         })
     return {
@@ -81,6 +85,7 @@ def base_book(phase="outlining", n_body=4, with_images=False):
         "idea": "小狐狸找月亮", "audience": "3-6岁", "style": "watercolor", "author": "lxy",
         "style_bible": "Soft watercolor, warm palette.",
         "character_bible": "Little Fox: red fur, amber eyes.\nMoon Granny: silver hair, round glasses, starry shawl.",
+        "assets": [],
         "title": {"zh": "小狐狸找月亮", "en": "Little Fox Seeks the Moon"},
         "story_note": "学会观察与坚持。",
         "cover": {"image_prompt": pages[0]["image_prompt"],

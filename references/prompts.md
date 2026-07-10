@@ -8,6 +8,16 @@ final_prompt = style_bible + "\n" + character_bible(按页过滤) + "\n"
              + page.image_prompt + "\n" + consistency_constraints(固定)
 ```
 
+升级版公式(有结构化资产时优先):
+
+```
+final_prompt = style_bible + "\n" + assets(按 page.cast 重组) + "\n"
+             + page.image_prompt + "\n" + consistency_constraints(固定)
+```
+
+`compose-prompt` 自动选择:页面有 `cast` 且 book.json 有 `assets` 时用 assets;
+否则回退到 `character_bible` + `--characters` 名字过滤。
+
 ## 1. style_bible(全局画风锚,≤100 字符进 prompt)
 
 描述媒介、配色、线条风格、光影、情绪氛围。示例:
@@ -35,6 +45,54 @@ small stature — about half the height of a lantern post.
 如 `--characters "小狐狸,月亮婆婆"`):工具自动注入对应角色的完整设定;**不要
 自己粘贴设定文本——只传名字**。名字匹配不到或留空时自动回退全量
 character_bible,角色锚永远在场。
+
+## 2b. assets + cast(结构化资产锚,优先于 character_bible)
+
+参考项目里更稳的做法是先把角色/道具/元素拆成结构化资产,再给每页记录出场
+清单。独立 skill 用两个命令落库:
+
+```
+save-assets --file assets.json
+save-cast --file cast.json
+```
+
+`assets.json` 形状:
+
+```json
+{
+  "assets": [
+    {
+      "id": "little-fox",
+      "type": "character",
+      "name": "Little Fox",
+      "description": "small red fox kit with amber eyes and a white chest",
+      "invariants": "white chest, amber eyes, small stature",
+      "prohibitions": "no clothes, no human hands",
+      "usage": "main character"
+    }
+  ]
+}
+```
+
+`cast.json` 形状:
+
+```json
+[
+  {"page_id": "cover", "assets": ["little-fox"]},
+  {"page_id": "page-1", "assets": ["little-fox", "moon-lantern"]}
+]
+```
+
+资产写法:
+
+- `type`: `character` / `prop` / `element`
+- `description`: 可见形状/颜色/材质/结构,English,≤160 字符,不写画风词
+- `invariants`: 必须不变的特征
+- `prohibitions`: 常见错画/禁止项
+- `usage`: 它在故事里的作用
+
+一条合格资产答得出:一眼认出是什么、换角度还是同一个、哪些必须不变、哪些
+不能出现、它在哪些页承担什么作用。
 
 ## 3. page.image_prompt(单页场景,保存上限 200 字符,拼装时截到 180)
 
@@ -77,7 +135,7 @@ palette; centered subject; no text or captions.
 | 段 | 预算 |
 |---|---|
 | style_bible | ≤100 字符 |
-| character_bible | ≤120 字符(传 --characters 只注入本页角色) |
+| assets / character_bible | ≤220 字符(有 cast 用本页资产;无 cast 才用 --characters) |
 | image_prompt | 保存 ≤200,拼装截 ≤180 |
 | constraints | 固定 ~123 字符 |
 

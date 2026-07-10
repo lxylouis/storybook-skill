@@ -151,6 +151,55 @@ class TestComposePrompt(unittest.TestCase):
                             "constraints tail dropped: ...%s" % out["prompt"][-50:])
 
 
+class TestAssetsAndCast(unittest.TestCase):
+    def _write_assets(self, td):
+        assets = Path(td) / "assets.json"
+        assets.write_text("""{
+          "assets": [
+            {"id": "little-fox", "type": "character", "name": "Little Fox",
+             "description": "small red fox kit with amber eyes and a white chest",
+             "invariants": "white chest and amber eyes", "prohibitions": "no clothes"},
+            {"id": "moon-lantern", "type": "prop", "name": "Moon Lantern",
+             "description": "round brass lantern with crescent cutouts",
+             "invariants": "crescent cutouts", "prohibitions": "no letters"}
+          ]
+        }""", encoding="utf-8")
+        return assets
+
+    def test_save_assets_and_cast_feed_compose_prompt(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            assets = self._write_assets(td)
+            code, out, _ = helpers.run_cli("save-assets", "--file", assets, "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(out["assets_count"], 2)
+            cast = Path(td) / "cast.json"
+            cast.write_text("""[
+              {"page_id": "page-1", "assets": ["Little Fox", "moon-lantern"]}
+            ]""", encoding="utf-8")
+            code, out, _ = helpers.run_cli("save-cast", "--file", cast, "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertEqual(out["assigned_pages"], 1)
+
+            code, out, _ = helpers.run_cli("compose-prompt", "--page", "page-1",
+                                           "--characters", "Moon Granny", "--dir", d)
+            self.assertEqual(code, 0)
+            self.assertIn("small red fox kit", out["prompt"])
+            self.assertIn("round brass lantern", out["prompt"])
+            self.assertNotIn("Moon Granny", out["prompt"])
+            self.assertEqual(out["assets_used"], ["little-fox", "moon-lantern"])
+
+    def test_save_cast_rejects_unknown_asset(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="illustrating")
+            helpers.run_cli("save-assets", "--file", self._write_assets(td), "--dir", d)
+            cast = Path(td) / "bad-cast.json"
+            cast.write_text('[{"page_id": "page-1", "assets": ["missing"]}]', encoding="utf-8")
+            code, out, _ = helpers.run_cli("save-cast", "--file", cast, "--dir", d)
+            self.assertEqual(code, 2)
+            self.assertIn("not found", out["error"])
+
+
 class TestConfirmAndNext(unittest.TestCase):
     def _confirmed(self, td):
         d = helpers.make_book(td, phase="awaiting_outline_confirm")
@@ -245,6 +294,10 @@ class TestAmendRegenerateSkip(unittest.TestCase):
                 '{"image_prompt": "fox jumps over a creek at dawn"}', "--dir", d)
             self.assertEqual(code, 0)
             self.assertIn("regenerate", out["next_action"])  # 改图才改图
+            page = helpers.read_book(d)["pages"][2]
+            self.assertEqual(page["image_file"], "")
+            self.assertTrue(page["image_history"][0].startswith("images/history/page-02-"))
+            self.assertTrue((Path(d) / page["image_history"][0]).is_file())
 
     def test_amend_page_validates_fields(self):
         with helpers.tmp() as td:
@@ -263,6 +316,8 @@ class TestAmendRegenerateSkip(unittest.TestCase):
             self.assertEqual(data["pages"][0]["image_file"], "")
             self.assertEqual(data["cover"]["image_file"], "")  # cover 同步
             self.assertEqual(data["pages"][0]["failed_attempts"], 1)
+            self.assertTrue(data["pages"][0]["image_history"][0].startswith("images/history/cover-"))
+            self.assertTrue((Path(d) / data["pages"][0]["image_history"][0]).is_file())
 
     def test_skip_sets_sentinel(self):
         with helpers.tmp() as td:
@@ -283,6 +338,49 @@ class TestAmendRegenerateSkip(unittest.TestCase):
             page = helpers.read_book(d)["pages"][2]
             self.assertEqual(page["image_file"], "skipped")
             self.assertNotIn("skip_reason", page)
+
+    def test_save_image_keeps_replaced_image_in_history(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="delivered", with_images=True)
+            src = Path(td) / "new.png"
+            src.write_bytes(b"new image bytes")
+            code, _, _ = helpers.run_cli("save-image", "--page", "page-2",
+                                         "--file", src, "--dir", d)
+            self.assertEqual(code, 0)
+            page = helpers.read_book(d)["pages"][2]
+            self.assertTrue(page["image_history"][0].startswith("images/history/page-02-"))
+            self.assertTrue((Path(d) / page["image_history"][0]).is_file())
+            self.assertEqual((Path(d) / page["image_history"][0]).read_bytes(), helpers.TINY_PNG)
+            self.assertEqual((Path(d) / "images/page-02.png").read_bytes(), b"new image bytes")
+
+    def test_save_outline_inherits_same_prompt_image_and_cast(self):
+        with helpers.tmp() as td:
+            d = helpers.make_book(td, phase="outlining", with_images=True)
+            data = helpers.read_book(d)
+            data["pages"][1]["cast"] = ["little-fox"]
+            data["assets"] = [{"id": "little-fox", "type": "character", "name": "Little Fox",
+                               "description": "small red fox", "invariants": "",
+                               "prohibitions": "", "usage": "", "ref_image_file": ""}]
+            helpers.write_book(d, data)
+            outline = Path(td) / "outline.json"
+            payload = {
+                "title": data["title"],
+                "author": data["author"],
+                "story_note": data["story_note"],
+                "style_bible": data["style_bible"],
+                "character_bible": data["character_bible"],
+                "pages": [
+                    {k: p[k] for k in ("page_no", "page_title", "narration", "image_prompt")}
+                    for p in data["pages"]
+                ],
+            }
+            import json
+            outline.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            code, _, _ = helpers.run_cli("save-outline", "--file", outline, "--dir", d)
+            self.assertEqual(code, 0)
+            after = helpers.read_book(d)
+            self.assertEqual(after["pages"][1]["image_file"], "images/page-01.png")
+            self.assertEqual(after["pages"][1]["cast"], ["little-fox"])
 
 
 class TestFinalize(unittest.TestCase):

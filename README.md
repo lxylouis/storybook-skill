@@ -5,7 +5,8 @@ AI 绘本工坊的通用 Agent Skill 版:一句话点子 → 大纲与双语旁�
 朗读、打印即 PDF)。符合 [Agent Skills](https://agentskills.io) 开放规范,
 可在 Claude Code、OpenClaw、Hermes Agent 等任意兼容宿主中使用。
 Fork 自 FreeDeepAgents 平台的 storybook 活动,状态机与一致性出图策略
-经过实机验证。
+经过实机验证。当前版本吸收了参考活动的结构化资产/cast 机制:先锁角色、
+道具和关键元素,再逐页按出场资产注入 prompt,比只靠角色名过滤更稳。
 
 ## 安装
 
@@ -60,13 +61,14 @@ export STORYBOOK_IMAGE_SIZE=1024x1536
 ```bash
 python3 scripts/storybook.py init --idea "小狐狸找月亮" --slug fox --dir .
 python3 scripts/storybook.py save-outline --file outline.json --dir fox
+python3 scripts/storybook.py save-assets --file assets.json --dir fox
+python3 scripts/storybook.py save-cast --file cast.json --dir fox
 python3 scripts/storybook.py status --dir fox   # 任何时候看下一步
 ```
 
-> **大图提示**: `finalize` 默认将图片 base64 内嵌到 HTML 中(单文件自包含,方便分享)。
-> 当使用 2K 以上大尺寸图片时,单文件可能达到几十 MB。此时用
-> `export --link-images` 输出小体积 HTML(图片通过 `images/` 目录引用),
-> 分享时把整个书目录一起打包即可。
+> **大图提示**: `finalize` 默认输出 `.zip` 小包,里面是 link-images HTML +
+> images/。要单个自包含 HTML 时用 `finalize --inline`;2K 图较多时可能达到
+> 几十 MB。返修后用 `export --zip` 重新打包。
 
 ## 测试
 
@@ -79,7 +81,7 @@ python3.13 -m unittest discover -s tests -v          # 现代解释器
 
 ```
 SKILL.md                 # agent 路由表(宿主自动加载)
-scripts/storybook.py     # 状态机 CLI(唯一写 book.json 的入口)
+scripts/storybook.py     # 状态机 CLI(唯一写 book.json 的入口;含 assets/cast)
 scripts/gen_image.py     # OpenAI 兼容出图兜底
 assets/viewer.template.html
 references/              # workflow / prompts / book-schema

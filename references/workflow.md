@@ -24,7 +24,12 @@ page_no 1..N,page_title.zh 2-15 字)。每页 narration 双语各自地道,有�
 
 ## 3. 封面 + 用户确认(awaiting_outline_confirm)
 
-1. `compose-prompt --page cover --characters <封面出场角色>`
+0. 建议先锁定结构化资产:
+   - `save-assets --file assets.json`:每个主角、关键道具、标志性元素各一条。
+   - `save-cast --file cast.json`:把封面和每一页映射到出场资产。
+   这样 `compose-prompt` 会按本页 cast 注入资产;没有 cast 时才用
+   `--characters` 回退到 character_bible。
+1. `compose-prompt --page cover [--characters <封面出场角色>]`
 2. 出图(双轨,见 SKILL.md)→ `save-image --page cover --file <img>`
 3. 向用户展示:书名(双语)、每页一句话梗概或页标题列表、封面图路径/图片
 4. **硬等待**。用户说改 → `amend-outline` 回 outlining 重写再 save-outline:
@@ -38,7 +43,7 @@ page_no 1..N,page_title.zh 2-15 字)。每页 narration 双语各自地道,有�
 confirm-outline 的返回就是第一个正文页。对每页:
 
 ```
-compose-prompt --page page-N --characters <本页角色名>
+compose-prompt --page page-N [--characters <本页角色名>]
 → 出图(轨道 A 或 B)→ save-image --page page-N --file <img>
 → 向用户报一行进度(「第 N/总 页画好了」)
 → next   # 返回下一页数据;all_done=true 则 finalize
@@ -49,6 +54,8 @@ compose-prompt --page page-N --characters <本页角色名>
   failed_attempts ≥ 3 → 停下来问用户改 prompt(amend-page)还是 `skip`。
 - 用户中途插话改某页 → amend-page / regenerate 处理完该页,继续循环。
 - 用户要求"一页页给我看" → 切换为每页后停下等确认(next 前等用户点头)。
+- 图像工具有单轮配额时,按参考活动的稳定节奏处理:每批最多 4 页,批完给用户
+  看一眼并等「继续」;这不是逐页确认,只是配额边界。
 
 ## 5. delivered:交付与返修
 
@@ -61,11 +68,14 @@ finalize 自动导出 HTML 并返回绝对路径。告诉用户:双击打开、�
 | 改第 N 页文字 | `amend-page --page page-N --json '{"narration": {...}}'` → `export` |
 | 改第 N 页画面 | `amend-page --json '{"image_prompt": "..."}'` → `regenerate` → 出图 → `save-image` → `export` |
 | 第 N 页图重画 | `regenerate` → 出图 → `save-image` → `export` |
+| 换回旧图 | 从该页 `image_history` 选历史图 → `save-image --page page-N --file <历史图路径>` → `export` |
 | 换画风 | `amend-outline` 回炉(全书重出),向用户确认后执行 |
 | 再来一本 | 新目录 `init`(旧书目录原样保留) |
 
 ## 6. 数据安全
 
 - book.json 只能经 CLI 写;每次写入自动留 book.json.bak。
+- 覆盖或清空图片前会复制旧图到 `images/history/`;历史路径仍由 CLI 管理,
+  不要手改 `image_history`。
 - 损坏恢复:`cp book.json.bak book.json` 后 `status` 核对。
 - CLI 没有任何删除整书的命令;用户要删书 = 删目录,**先口头确认再动手**。

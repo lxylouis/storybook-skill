@@ -37,12 +37,14 @@ _IMAGE_FILE_RE = re.compile(r"^images/[\w.\-]+$")
 PHASE_NEXT_COMMANDS = {
     "outlining": ["save-outline"],
     "awaiting_outline_confirm": [
-        "save-image --page cover", "confirm-outline", "amend-outline",
+        "save-assets", "save-cast", "save-image --page cover",
+        "confirm-outline", "amend-outline",
     ],
     "illustrating": [
-        "compose-prompt", "save-image", "next", "skip", "finalize",
+        "save-assets", "save-cast", "compose-prompt", "save-image", "next",
+        "skip", "finalize",
     ],
-    "delivered": ["amend-page", "regenerate", "export"],
+    "delivered": ["save-assets", "save-cast", "amend-page", "regenerate", "export"],
 }
 
 
@@ -138,6 +140,7 @@ def _default_book(idea, audience, style, author):
         "phase": "outlining",
         "idea": idea, "audience": audience, "style": style, "author": author,
         "style_bible": "", "character_bible": "",
+        "assets": [],
         "title": {"zh": "", "en": ""},
         "story_note": "",
         "cover": {"image_prompt": "", "image_file": ""},
@@ -195,6 +198,54 @@ def _clean_image_file(val, page_idx):
                    "(letters/digits/dot/dash only), empty, or \"skipped\". It "
                    "is set by save-image — don't hand-write it into the outline.")
     return val
+
+
+def _clean_image_history(val, page_idx):
+    if not val:
+        return []
+    if not isinstance(val, list):
+        _fail("pages[%d].image_history must be a list" % page_idx)
+    cleaned = []
+    for item in val:
+        img = _clean_image_file(item, page_idx)
+        if img and img != SKIP_SENTINEL and img not in cleaned:
+            cleaned.append(img)
+    return cleaned
+
+
+def _add_image_history(page, image_file):
+    img = (image_file or "").strip()
+    if not img or img == SKIP_SENTINEL:
+        return
+    hist = page.setdefault("image_history", [])
+    if img not in hist:
+        hist.append(img)
+
+
+def _archive_current_image(book_dir, page):
+    """Copy the current page image aside before it is cleared or overwritten."""
+    img = (page.get("image_file") or "").strip()
+    if not img or img == SKIP_SENTINEL:
+        return
+    src = Path(book_dir) / img
+    if not src.is_file():
+        _add_image_history(page, img)
+        return
+    hist = page.setdefault("image_history", [])
+    hist_dir = Path(book_dir) / "images" / "history"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(img).stem
+    ext = Path(img).suffix.lower() or ".png"
+    idx = len(hist) + 1
+    while True:
+        rel = "images/history/%s-%02d%s" % (stem, idx, ext)
+        dest = Path(book_dir) / rel
+        if not dest.exists():
+            break
+        idx += 1
+    shutil.copyfile(src, dest)
+    if rel not in hist:
+        hist.append(rel)
 
 
 def _validate_outline_input(payload):
@@ -282,6 +333,9 @@ def _validate_outline_input(payload):
                           "en": nar.get("en", "").strip()},
             "image_prompt": ipr,
             "image_file": _clean_image_file(p.get("image_file"), i),
+            "image_history": _clean_image_history(p.get("image_history"), i),
+            "cast": [str(x).strip() for x in p.get("cast", []) if str(x).strip()]
+                    if isinstance(p.get("cast", []), list) else [],
             "failed_attempts": int(p.get("failed_attempts", 0) or 0),
         })
     meta = {
@@ -292,6 +346,40 @@ def _validate_outline_input(payload):
         "character_bible": cb,
     }
     return meta, norm
+
+
+def _merge_existing_page_state(book_dir, data, meta, pages):
+    """Carry stable per-page state across an outline rewrite.
+
+    This mirrors the reference activity's "mechanism-level inheritance": if a
+    page keeps the same id and image_prompt and the global style did not change,
+    its current image/cast/history stay attached even when the outline JSON did
+    not manually carry image_file back.
+    """
+    old_pages = {p.get("id"): p for p in data.get("pages", [])}
+    style_changed = bool(data.get("style_bible")) and (
+        (data.get("style_bible") or "").strip() != meta.get("style_bible", "")
+    )
+    for page in pages:
+        old = old_pages.get(page.get("id"))
+        if not old:
+            continue
+        hist = list(old.get("image_history") or [])
+        for img in page.get("image_history") or []:
+            if img not in hist:
+                hist.append(img)
+        same_prompt = (old.get("image_prompt") or "").strip() == page.get("image_prompt", "")
+        explicit_img = bool((page.get("image_file") or "").strip())
+        if not explicit_img and same_prompt and not style_changed:
+            page["image_file"] = (old.get("image_file") or "").strip()
+            page["failed_attempts"] = int(old.get("failed_attempts", 0) or 0)
+        elif (old.get("image_file") or "").strip():
+            tmp_page = {"image_file": old.get("image_file"), "image_history": hist}
+            _archive_current_image(book_dir, tmp_page)
+            hist = tmp_page.get("image_history", hist)
+        if not page.get("cast") and isinstance(old.get("cast"), list):
+            page["cast"] = list(old.get("cast") or [])
+        page["image_history"] = hist
 
 
 def cmd_save_outline(args):
@@ -309,6 +397,7 @@ def cmd_save_outline(args):
     except Exception as exc:
         _fail("outline file is not valid JSON: %s" % exc)
     meta, pages = _validate_outline_input(payload)
+    _merge_existing_page_state(args.dir, data, meta, pages)
     data.update(meta)
     data["pages"] = pages
     data["cover"] = {"image_prompt": pages[0]["image_prompt"],
@@ -338,6 +427,162 @@ CONSISTENCY_CONSTRAINTS = (
 )
 
 
+ASSET_TYPES = ("character", "prop", "element")
+
+
+def _slugify_asset_id(name, idx):
+    slug = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")
+    return slug or ("asset-%d" % (idx + 1))
+
+
+def _load_json_arg(path, stdin_text=""):
+    if path == "-":
+        raw = stdin_text if stdin_text else sys.stdin.read()
+    else:
+        f = Path(path)
+        if not f.is_file():
+            _fail("JSON file %r not found" % str(f))
+        raw = f.read_text(encoding="utf-8")
+    try:
+        return json.loads(raw)
+    except Exception as exc:
+        _fail("JSON is invalid: %s" % exc)
+
+
+def _validate_assets(payload):
+    items = payload.get("assets") if isinstance(payload, dict) else payload
+    if not isinstance(items, list) or not items:
+        _fail("assets must be a non-empty list")
+    seen = set()
+    out = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            _fail("assets[%d] must be an object" % idx)
+        typ = (item.get("type") or "character").strip()
+        if typ not in ASSET_TYPES:
+            _fail("assets[%d].type must be one of %s" % (idx, ASSET_TYPES))
+        name = (item.get("name") or "").strip()
+        if not name:
+            _fail("assets[%d].name is required" % idx)
+        aid = (item.get("id") or _slugify_asset_id(name, idx)).strip()
+        if not re.match(r"^[A-Za-z0-9_-]+$", aid):
+            _fail("assets[%d].id must match ^[A-Za-z0-9_-]+$" % idx)
+        key = aid.lower()
+        if key in seen:
+            _fail("duplicate asset id %r" % aid)
+        seen.add(key)
+        desc = (item.get("description") or "").strip()
+        if not desc:
+            _fail("assets[%d].description is required" % idx,
+                  hint="Describe visible shape/color/material/structure in English; no art-style words.")
+        if len(desc) > 160:
+            _fail("assets[%d].description too long (%d chars, max 160)" % (idx, len(desc)))
+        out.append({
+            "id": aid, "type": typ, "name": name,
+            "description": desc,
+            "invariants": (item.get("invariants") or "").strip()[:160],
+            "prohibitions": (item.get("prohibitions") or "").strip()[:160],
+            "usage": (item.get("usage") or "").strip()[:200],
+            "ref_image_file": _clean_image_file(item.get("ref_image_file"), idx),
+        })
+    return out
+
+
+def _asset_lookup(data):
+    lookup = {}
+    for item in data.get("assets", []) or []:
+        for key in (item.get("id", ""), item.get("name", "")):
+            if key:
+                lookup[key.lower()] = item
+    return lookup
+
+
+def _asset_segment_for_page(data, page):
+    assets = data.get("assets") or []
+    cast = page.get("cast") or []
+    if not assets or not cast:
+        return "", []
+    lookup = _asset_lookup(data)
+    chosen = []
+    for key in cast:
+        item = lookup.get(str(key).lower())
+        if item and item not in chosen:
+            chosen.append(item)
+    if not chosen:
+        return "", []
+    parts = []
+    refs = []
+    for item in chosen:
+        text = "%s: %s" % (item.get("name"), item.get("description"))
+        inv = (item.get("invariants") or "").strip()
+        pro = (item.get("prohibitions") or "").strip()
+        if inv:
+            text += " [keep: %s]" % inv
+        if pro:
+            text += " [no: %s]" % pro
+        parts.append(text)
+        ref = (item.get("ref_image_file") or "").strip()
+        if ref:
+            refs.append(ref)
+    return "; ".join(parts), refs
+
+
+def cmd_save_assets(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "awaiting_outline_confirm", "illustrating", "delivered")
+    assets = _validate_assets(_load_json_arg(args.file))
+    data["assets"] = assets
+    valid_ids = {a["id"] for a in assets}
+    for page in data.get("pages", []):
+        if isinstance(page.get("cast"), list):
+            page["cast"] = [x for x in page["cast"] if x in valid_ids]
+    _write_book(args.dir, data)
+    _emit({
+        "ok": True, "assets_count": len(assets),
+        "next_action": "Run save-cast to map each page to these assets, then compose-prompt will inject only the assets on that page.",
+    })
+
+
+def cmd_save_cast(args):
+    data = _load_book(args.dir)
+    _require_phase(data, "awaiting_outline_confirm", "illustrating", "delivered")
+    payload = _load_json_arg(args.file)
+    assignments = payload.get("assignments") if isinstance(payload, dict) else payload
+    if not isinstance(assignments, list) or not assignments:
+        _fail("cast assignments must be a non-empty list")
+    lookup = _asset_lookup(data)
+    if not lookup:
+        _fail("no assets saved",
+              hint="Run save-assets first with character/prop/element definitions.")
+    page_ids = {p.get("id") for p in data.get("pages", [])}
+    summary = {}
+    for item in assignments:
+        if not isinstance(item, dict):
+            _fail("each cast assignment must be an object")
+        pid = (item.get("page_id") or item.get("page") or "").strip()
+        if pid not in page_ids:
+            _fail("page_id %r not found" % pid,
+                  hint="available: %s" % sorted(page_ids))
+        raw_assets = item.get("assets") or item.get("asset_ids") or []
+        if not isinstance(raw_assets, list):
+            _fail("assignment for %s must have assets as a list" % pid)
+        asset_ids = []
+        for raw in raw_assets:
+            asset = lookup.get(str(raw).strip().lower())
+            if not asset:
+                _fail("asset %r in page %s not found" % (raw, pid),
+                      hint="Use saved asset ids or names.")
+            if asset["id"] not in asset_ids:
+                asset_ids.append(asset["id"])
+                summary.setdefault(asset["name"], []).append(pid)
+        _find_page(data, pid)["cast"] = asset_ids
+    _write_book(args.dir, data)
+    _emit({
+        "ok": True, "assigned_pages": len(assignments), "asset_pages": summary,
+        "next_action": "Cast saved. Use compose-prompt; it will prefer page.cast assets and fall back to --characters only when no cast exists.",
+    })
+
+
 def cmd_compose_prompt(args):
     data = _load_book(args.dir)
     pid = (args.page or "").strip()
@@ -347,29 +592,29 @@ def cmd_compose_prompt(args):
         _require_phase(data, "illustrating", "delivered")
     style = (data.get("style_bible") or "").strip()
     full_character = (data.get("character_bible") or "").strip()
+    page = _find_page(data, pid)
+    asset_segment, ref_images = _asset_segment_for_page(data, page)
 
     # characters 是角色名过滤器:从 character_bible 里挑出对应角色的完整设定
     # 条目。名字匹配不到(或没传)一律回退全量 bible——角色锚永远在场,防止
     # "只传名字导致角色设定丢失→跨页漂移"。(移植 tools.py:298-311)
-    chars = full_character
+    chars = asset_segment or full_character
     requested = (args.characters or "").strip()
-    if requested and full_character:
+    if not asset_segment and requested and full_character:
         entries = [e.strip() for e in re.split(r"[\n;；]+", full_character) if e.strip()]
         names = [n.strip() for n in re.split(r"[,，、/|\s]+", requested) if n.strip()]
         matched = [e for e in entries
                    if any(n.lower() in e.lower() for n in names)]
         if matched:
             chars = "; ".join(matched)
-
-    page = _find_page(data, pid)
     ipr = (page.get("image_prompt") or "").strip()
     if not ipr:
         _fail("image_prompt not found for page %r" % pid,
               hint="available: %s" % [p.get("id") for p in data.get("pages", [])])
 
-    # Truncate each section to fit 500 chars (FDA budgets: 100/120/180).
+    # Truncate each section to fit 500 chars (budgets: 100/220/180).
     style = style[:100].strip()
-    chars = chars[:120].strip()
+    chars = chars[:220].strip()
     ipr = ipr[:180].strip()
     # Reserve the consistency constraints' full budget FIRST, then fit the
     # variable sections into whatever room is left. The old code joined all
@@ -383,6 +628,8 @@ def cmd_compose_prompt(args):
     prompt = head + "\n" + CONSISTENCY_CONSTRAINTS if head else CONSISTENCY_CONSTRAINTS
     _emit({
         "ok": True, "page_id": pid, "prompt": prompt, "prompt_len": len(prompt),
+        "assets_used": page.get("cast", []) if asset_segment else [],
+        "ref_images": ref_images,
         "next_action": "Generate ONE portrait (~2:3) image from this prompt — "
                        "use the host's image tool if available, else "
                        "scripts/gen_image.py. Do NOT modify the prompt. Then "
@@ -423,6 +670,7 @@ def cmd_save_image(args):
         dest_name = "page-%02d%s" % (int(page.get("page_no", 0)), ext)
     dest = Path(args.dir) / "images" / dest_name
     dest.parent.mkdir(parents=True, exist_ok=True)
+    _archive_current_image(args.dir, page)
     shutil.copyfile(src, dest)
     rel = "images/" + dest_name
     page["image_file"] = rel
@@ -582,10 +830,13 @@ def cmd_amend_page(args):
         if len(ipr) > 200:
             _fail("image_prompt too long (%d chars, max 200)" % len(ipr))
         if ipr != page.get("image_prompt"):
+            _archive_current_image(args.dir, page)
             page["image_prompt"] = ipr
+            page["image_file"] = ""
             prompt_changed = True
             if pid == "cover":
                 data.setdefault("cover", {})["image_prompt"] = ipr
+                data.setdefault("cover", {})["image_file"] = ""
     _write_book(args.dir, data)
     if prompt_changed:
         nxt = ("image_prompt changed → the old picture no longer matches. Run "
@@ -601,6 +852,7 @@ def cmd_regenerate(args):
     _require_phase(data, "illustrating", "delivered")
     pid = (args.page or "").strip()
     page = _find_page(data, pid)
+    _archive_current_image(args.dir, page)
     page["image_file"] = ""
     page["failed_attempts"] = int(page.get("failed_attempts", 0)) + 1
     if data["pages"] and data["pages"][0].get("id") == pid:
@@ -621,6 +873,7 @@ def cmd_skip(args):
     _require_phase(data, "illustrating")
     pid = (args.page or "").strip()
     page = _find_page(data, pid)
+    _archive_current_image(args.dir, page)
     page["image_file"] = SKIP_SENTINEL
     if (args.reason or "").strip():
         page["skip_reason"] = args.reason.strip()
@@ -812,6 +1065,8 @@ def cmd_status(args):
             "page_id": p.get("id", ""), "page_no": p.get("page_no", 0),
             "done": is_done, "skipped": is_skipped,
             "failed_attempts": int(p.get("failed_attempts", 0)),
+            "cast": p.get("cast", []) if isinstance(p.get("cast"), list) else [],
+            "image_history_count": len(p.get("image_history") or []),
             "image_file": "" if is_skipped else img,
         })
     cover_ok = bool((data.get("cover", {}).get("image_file") or "").strip())
@@ -843,6 +1098,8 @@ def cmd_status(args):
         "title": data.get("title", {}), "idea": data.get("idea", ""),
         "audience": data.get("audience", ""), "style": data.get("style", ""),
         "author": data.get("author", ""),
+        "assets_count": len(data.get("assets") or []),
+        "cast_pages": sum(1 for p in pages if p.get("cast")),
         "cover_done": cover_ok,
         "pages_total": len(pages), "pages_done": done, "pages_skipped": skipped,
         "current_page_index": int(data.get("current_page_index", 0)),
@@ -909,6 +1166,18 @@ def build_parser():
     p.add_argument("--file", required=True, help="path of the generated image")
     p.add_argument("--dir", default=".")
     p.set_defaults(func=cmd_save_image)
+
+    p = sub.add_parser("save-assets",
+                       help="Persist structured character/prop/element anchors.")
+    p.add_argument("--file", required=True, help="assets JSON path, or - for stdin")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_save_assets)
+
+    p = sub.add_parser("save-cast",
+                       help="Map each page to the assets appearing on it.")
+    p.add_argument("--file", required=True, help="cast JSON path, or - for stdin")
+    p.add_argument("--dir", default=".")
+    p.set_defaults(func=cmd_save_cast)
 
     p = sub.add_parser("confirm-outline",
                        help="User confirmed outline+cover → illustrating.")
