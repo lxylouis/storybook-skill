@@ -114,6 +114,14 @@
   #langbtn .pill { padding: 2px 9px; border-radius: 999px; font-weight: 800; color: var(--ink-faint); transition: all .2s ease; }
   #langbtn .pill.on { background: var(--honey); color: #FFF8E8; }
   #langbtn .sep { color: var(--ink-faint); font-weight: 700; }
+  .top-tool {
+    width: 42px; height: 42px; padding: 0; justify-content: center;
+    font-size: 17px; gap: 0; flex: 0 0 auto;
+  }
+  .top-tool .toplabel {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
   @keyframes sb-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
   body.speaking #speakicon { animation: sb-pulse .8s ease-in-out infinite; display: inline-block; }
 
@@ -218,16 +226,22 @@
       radial-gradient(circle at 20% 10%, rgba(247,197,68,.16), transparent 30%),
       linear-gradient(180deg, #1f1510, #3b2417 55%, #17100c);
     color: #FFF8E8; font-family: var(--font-ui);
+    min-height: 100vh; min-height: 100dvh;
   }
   #theater.open { display: flex; flex-direction: column; }
   #theaterbar {
-    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    flex: 0 0 auto; min-height: 64px;
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
     background: rgba(20, 12, 8, .76); box-shadow: 0 4px 18px rgba(0,0,0,.34);
   }
   #theater-title { flex: 1; min-width: 0; font-family: var(--font-title); font-weight: 800; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #theaterstage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; }
+  #theaterstage {
+    flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center;
+    padding: clamp(10px, 2vh, 20px); overflow: hidden;
+  }
   .th-card {
-    width: min(1120px, 100%); height: min(720px, 100%);
+    width: min(1120px, 100%); height: 100%; max-height: calc(100vh - 88px); max-height: calc(100dvh - 88px);
+    min-height: 0;
     display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
     gap: 18px; align-items: stretch;
   }
@@ -236,12 +250,16 @@
     border: 2px solid rgba(255,248,232,.18); overflow: hidden;
     box-shadow: 0 14px 40px rgba(0,0,0,.28);
   }
-  .th-book { display: flex; flex-direction: column; min-width: 0; }
-  .th-art { flex: 1; min-height: 0; display: grid; place-items: center; background: #120c08; }
-  .th-art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .th-book { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
+  .th-art { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; place-items: center; background: #120c08; }
+  .th-art img { width: 100%; height: 100%; object-fit: contain; }
   .th-art .placeholder { color: rgba(255,248,232,.72); font-family: var(--font-title); text-align: center; font-size: 42px; }
-  .th-caption { padding: 16px 18px; font-family: var(--font-story); font-weight: 800; line-height: 1.65; font-size: clamp(18px, 2.2vw, 28px); background: rgba(0,0,0,.28); }
-  .th-cam { position: relative; min-height: 280px; background: #100a07; display: grid; place-items: center; }
+  .th-caption {
+    flex: 0 0 auto; max-height: 28%; overflow: auto;
+    padding: 14px 18px; font-family: var(--font-story); font-weight: 800;
+    line-height: 1.55; font-size: clamp(16px, 2vw, 24px); background: rgba(0,0,0,.28);
+  }
+  .th-cam { position: relative; min-height: 0; height: 100%; background: #100a07; display: grid; place-items: center; }
   .th-cam video { width: 100%; height: 100%; object-fit: cover; }
   .th-cam .sim { text-align: center; color: rgba(255,248,232,.75); font-weight: 800; }
   .th-progress { height: 8px; background: rgba(255,248,232,.16); overflow: hidden; }
@@ -267,6 +285,7 @@
   #theater.pip-mode .th-card { grid-template-columns: 1fr; position: relative; }
   #theater.pip-mode .th-cam { position: absolute; right: 22px; bottom: 22px; width: min(300px, 34vw); height: min(220px, 28vh); z-index: 2; }
   #theater.pip-mode .th-book { grid-column: 1; }
+  #theater.cinema-mode .th-card { grid-template-columns: 1fr; width: min(760px, 92vw); }
   @media (max-width: 780px) {
     .th-card { grid-template-columns: 1fr; height: 100%; }
     #theater.pip-mode .th-cam, #theater.stage-mode .th-book {
@@ -383,6 +402,7 @@
     /* 桌面端还原完整控件 */
     #printlabel { display: inline; }
     .st-paper { padding: 6px 14px; }
+    .top-tool { width: 48px; height: 48px; font-size: 19px; padding: 0; }
     #langbtn { padding: 4px 6px; gap: 4px; font-size: 15px; border-width: 3px; }
     #langbtn .pill { padding: 3px 10px; }
   }
@@ -425,6 +445,12 @@
 <div id="doodles" aria-hidden="true"></div>
 <header>
   <h1 id="booktitle"></h1>
+  <button class="sticker st-mint top-tool" id="cinemabtn" title="自动播放整本绘本 / Auto-play the book">
+    ▶ <span class="toplabel" id="cinemalabel">绘本放映厅</span>
+  </button>
+  <button class="sticker st-coral top-tool" id="theaterbtn" title="录制你的绘本表演 / Record a story performance">
+    🎬 <span class="toplabel" id="theaterlabel">绘本剧场</span>
+  </button>
   <button class="sticker st-paper" id="printbtn" title="打印或另存为 PDF / Print or save as PDF">🖨️ <span id="printlabel">打印</span></button>
   <button class="sticker" id="langbtn" aria-label="切换语言 Toggle language">
     <span class="pill on" id="pill-zh">CN</span><span class="sep">/</span><span class="pill" id="pill-en">EN</span>
@@ -448,12 +474,6 @@
           </button>
           <button class="sticker st-sky" id="recbtn" title="录下你自己读这一页 / Record yourself reading">
             🦜 <span id="reclabel">我自己读</span>
-          </button>
-          <button class="sticker st-mint" id="cinemabtn" title="自动播放整本绘本 / Auto-play the book">
-            ▶ <span id="cinemalabel">绘本放映厅</span>
-          </button>
-          <button class="sticker st-coral" id="theaterbtn" title="录制你的绘本表演 / Record a story performance">
-            🎬 <span id="theaterlabel">绘本剧场</span>
           </button>
         </div>
         <div id="recpanel" aria-live="polite"></div>
@@ -506,6 +526,7 @@ var STR = {
   exit:     { zh: "退出", en: "Exit" },
   pause:    { zh: "暂停", en: "Pause" },
   resume:   { zh: "继续", en: "Resume" },
+  finish:   { zh: "完成", en: "Finish" },
   restart:  { zh: "从头", en: "Restart" },
   replay:   { zh: "再看一遍", en: "Watch Again" },
   startShow:{ zh: "开始表演", en: "Start Show" },
@@ -1035,6 +1056,7 @@ document.getElementById("recbtn").onclick = function () {
 var perf = {
   mode: "", page: 0, layout: "split", timer: null, tick: null,
   startedAt: 0, dur: 0, remaining: 0, paused: false, done: false,
+  recording: false, session: 0,
   stream: null, video: null, recorder: null, chunks: [], clipUrl: "",
   drawRaf: null, canvasStream: null, currentImg: null, sim: false
 };
@@ -1073,6 +1095,41 @@ function stopPerfTimers() {
 function stopPerfSpeech() {
   if (window.speechSynthesis) { try { speechSynthesis.cancel(); } catch (e) { /* noop */ } }
 }
+function stopTracks(stream) {
+  if (stream) { stream.getTracks().forEach(function (tr) { try { tr.stop(); } catch (e) { /* noop */ } }); }
+}
+function hasLivePerfCamera() {
+  return !!(perf.stream && perf.stream.getVideoTracks().some(function (tr) { return tr.readyState === "live"; }));
+}
+function stopPerfCanvasStream() {
+  if (!perf.canvasStream) { return; }
+  var sourceTracks = perf.stream ? perf.stream.getTracks() : [];
+  perf.canvasStream.getTracks().forEach(function (tr) {
+    if (sourceTracks.indexOf(tr) === -1) { try { tr.stop(); } catch (e) { /* noop */ } }
+  });
+  perf.canvasStream = null;
+}
+function revokePerfClip() {
+  if (perf.clipUrl) { URL.revokeObjectURL(perf.clipUrl); perf.clipUrl = ""; }
+}
+function resetPerfRecording(keepCamera) {
+  perf.session += 1;
+  stopPerfTimers();
+  stopPerfSpeech();
+  stopPerfDrawing();
+  if (perf.recorder && perf.recorder.state !== "inactive") {
+    try { perf.recorder.onstop = null; perf.recorder.stop(); } catch (e) { /* noop */ }
+  }
+  perf.recorder = null;
+  stopPerfCanvasStream();
+  if (!keepCamera) { stopTracks(perf.stream); perf.stream = null; }
+  perf.video = null;
+  perf.currentImg = null;
+  perf.chunks = [];
+  perf.recording = false;
+  perf.done = false;
+  perf.paused = false;
+}
 function loadPerfImage(i) {
   var p = BOOK.pages[i] || {};
   perf.currentImg = null;
@@ -1091,8 +1148,12 @@ function renderPerfControls() {
         return '<button data-layout="' + l + '" class="' + (perf.layout === l ? "on" : "") + '">' + esc(t(STR[l], state.lang)) + "</button>";
       }).join("") + "</span>";
   }
-  if (!perf.done && (perf.mode === "cinema" || perf.recorder)) {
+  var isRecording = perf.mode === "record" && perf.recording && !perf.done;
+  if (!perf.done && (perf.mode === "cinema" || isRecording || perf.recorder)) {
     html += '<button class="sticker st-paper" id="th-pause">' + esc(t(perf.paused ? STR.resume : STR.pause, state.lang)) + "</button>";
+  }
+  if (isRecording) {
+    html += '<button class="sticker st-coral" id="th-finish">✓ ' + esc(t(STR.finish, state.lang)) + "</button>";
   }
   html += '<button class="sticker st-paper" id="th-restart">↻ ' + esc(t(STR.restart, state.lang)) + "</button>";
   c.innerHTML = html;
@@ -1101,6 +1162,8 @@ function renderPerfControls() {
   });
   var pause = document.getElementById("th-pause");
   if (pause) { pause.onclick = function () { perf.paused ? resumePerformance() : pausePerformance(); }; }
+  var finish = document.getElementById("th-finish");
+  if (finish) { finish.onclick = finishPerformance; }
   var restart = document.getElementById("th-restart");
   if (restart) { restart.onclick = function () { perf.mode === "record" ? renderPerfSetup() : startCinema(); }; }
 }
@@ -1109,6 +1172,7 @@ function renderPerfShell(title) {
   root.classList.add("open");
   root.classList.toggle("pip-mode", perf.layout === "pip");
   root.classList.toggle("stage-mode", perf.layout === "stage");
+  root.classList.toggle("cinema-mode", perf.mode === "cinema");
   document.getElementById("theater-title").textContent = title;
   document.getElementById("theater-close-label").textContent = t(STR.exit, state.lang);
   renderPerfControls();
@@ -1128,9 +1192,39 @@ function renderPerfPage() {
     cam + "</div>";
   if (perf.stream) {
     var v = document.getElementById("th-video");
-    if (v) { v.srcObject = perf.stream; perf.video = v; }
+    if (v) {
+      v.srcObject = perf.stream;
+      perf.video = v;
+      try {
+        var play = v.play();
+        if (play && play.catch) { play.catch(function () {}); }
+      } catch (e) { /* noop */ }
+    }
   }
   loadPerfImage(perf.page);
+}
+function waitForPerfVideoReady(session, cb) {
+  if (!perf.video || !perf.stream || perf.sim) { cb(); return; }
+  var v = perf.video;
+  var done = false;
+  function cleanup() {
+    v.removeEventListener("loadedmetadata", ready);
+    v.removeEventListener("canplay", ready);
+  }
+  function ready() {
+    if (done) { return; }
+    done = true;
+    cleanup();
+    if (session === perf.session) { cb(); }
+  }
+  if (v.readyState >= 2 && v.videoWidth > 0) { ready(); return; }
+  v.addEventListener("loadedmetadata", ready);
+  v.addEventListener("canplay", ready);
+  try {
+    var play = v.play();
+    if (play && play.catch) { play.catch(function () {}); }
+  } catch (e) { /* noop */ }
+  setTimeout(ready, 900);
 }
 function schedulePerfPage(audible) {
   stopPerfTimers();
@@ -1205,13 +1299,11 @@ function startCinema() {
   schedulePerfPage(true);
 }
 function renderPerfSetup() {
+  resetPerfRecording(false);
   perf.mode = "record";
   perf.page = 0;
   perf.done = false;
-  stopPerfTimers();
-  stopPerfSpeech();
-  stopPerfDrawing();
-  if (perf.clipUrl) { URL.revokeObjectURL(perf.clipUrl); perf.clipUrl = ""; }
+  revokePerfClip();
   renderPerfShell(t(STR.theater, state.lang));
   document.getElementById("theaterstage").innerHTML =
     '<div class="th-setup"><h2>🎬 ' + esc(t(STR.theaterReady, state.lang)) + '</h2>' +
@@ -1222,6 +1314,11 @@ function renderPerfSetup() {
   document.getElementById("th-cam").onclick = enablePerfCamera;
 }
 function enablePerfCamera(cb) {
+  if (hasLivePerfCamera()) {
+    perf.sim = false;
+    if (cb) { cb(); }
+    return;
+  }
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
     perf.sim = true; if (cb) { cb(); } return;
   }
@@ -1232,11 +1329,24 @@ function enablePerfCamera(cb) {
   });
 }
 function startRecordShow() {
+  resetPerfRecording(true);
+  revokePerfClip();
+  perf.session += 1;
+  var session = perf.session;
+  perf.recording = true;
+  perf.done = false;
+  perf.paused = false;
+  perf.chunks = [];
   enablePerfCamera(function () {
+    if (session !== perf.session) { return; }
     perf.page = 0;
+    perf.recording = true;
     renderPerfPage();
-    startPerfRecorder();
-    schedulePerfPage(false);
+    waitForPerfVideoReady(session, function () {
+      if (session !== perf.session) { return; }
+      startPerfRecorder(session);
+      schedulePerfPage(false);
+    });
   });
 }
 function stopPerfDrawing() {
@@ -1311,7 +1421,7 @@ function startPerfDrawing() {
   }
   loop();
 }
-function startPerfRecorder() {
+function startPerfRecorder(session) {
   perf.chunks = [];
   var cv = document.getElementById("theatercanvas");
   var stream = cv.captureStream ? cv.captureStream(30) : null;
@@ -1320,6 +1430,7 @@ function startPerfRecorder() {
     perf.stream.getAudioTracks().forEach(function (tr) { stream.addTrack(tr); });
   }
   perf.canvasStream = stream;
+  drawCompositeFrame();
   startPerfDrawing();
   if (!window.MediaRecorder) { return; }
   try {
@@ -1327,12 +1438,16 @@ function startPerfRecorder() {
     perf.recorder = rec;
     rec.ondataavailable = function (e) { if (e.data && e.data.size) { perf.chunks.push(e.data); } };
     rec.onstop = function () {
+      if (session !== perf.session || perf.mode !== "record") { return; }
+      stopPerfDrawing();
+      stopPerfCanvasStream();
+      perf.recording = false;
       var blob = new Blob(perf.chunks, { type: rec.mimeType || "video/webm" });
-      if (perf.clipUrl) { URL.revokeObjectURL(perf.clipUrl); }
+      revokePerfClip();
       perf.clipUrl = URL.createObjectURL(blob);
       renderPerfReview();
     };
-    rec.start();
+    rec.start(250);
   } catch (e) { perf.recorder = null; }
 }
 function finishPerformance() {
@@ -1341,10 +1456,20 @@ function finishPerformance() {
   stopPerfSpeech();
   setPerfProgress(1);
   if (perf.mode === "record") {
-    stopPerfDrawing();
+    drawCompositeFrame();
     if (perf.recorder && perf.recorder.state !== "inactive") {
-      try { perf.recorder.stop(); } catch (e) { renderPerfReview(); }
-    } else { renderPerfReview(); }
+      try { perf.recorder.stop(); } catch (e) {
+        stopPerfDrawing();
+        stopPerfCanvasStream();
+        perf.recording = false;
+        renderPerfReview();
+      }
+    } else {
+      stopPerfDrawing();
+      stopPerfCanvasStream();
+      perf.recording = false;
+      renderPerfReview();
+    }
   } else {
     renderPerfShell(t(STR.cinema, state.lang));
     document.getElementById("theaterstage").innerHTML =
@@ -1354,6 +1479,8 @@ function finishPerformance() {
   }
 }
 function renderPerfReview() {
+  perf.recording = false;
+  perf.done = true;
   renderPerfShell(t(STR.theater, state.lang));
   var video = perf.clipUrl ? '<video id="reviewvideo" src="' + esc(perf.clipUrl) + '" controls playsinline></video>' : '<p>' + esc(t(STR.camNo, state.lang)) + '</p>';
   document.getElementById("theaterstage").innerHTML =
@@ -1365,14 +1492,9 @@ function renderPerfReview() {
   if (redo) { redo.onclick = renderPerfSetup; }
 }
 function closePerformance() {
-  stopPerfTimers();
-  stopPerfSpeech();
-  stopPerfDrawing();
-  if (perf.recorder && perf.recorder.state !== "inactive") { try { perf.recorder.stop(); } catch (e) { /* noop */ } }
-  if (perf.stream) { perf.stream.getTracks().forEach(function (tr) { tr.stop(); }); }
-  if (perf.canvasStream) { perf.canvasStream.getTracks().forEach(function (tr) { tr.stop(); }); }
-  perf.stream = null; perf.video = null; perf.recorder = null; perf.canvasStream = null;
-  document.getElementById("theater").classList.remove("open", "pip-mode", "stage-mode");
+  resetPerfRecording(false);
+  revokePerfClip();
+  document.getElementById("theater").classList.remove("open", "pip-mode", "stage-mode", "cinema-mode");
   document.getElementById("theaterstage").innerHTML = "";
 }
 document.getElementById("cinemabtn").onclick = startCinema;

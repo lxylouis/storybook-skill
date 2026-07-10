@@ -36,6 +36,13 @@ export STORYBOOK_IMAGE_MODEL=gpt-image-1
 export STORYBOOK_IMAGE_SIZE=1024x1536
 ```
 
+安全提示:
+
+- 不要把真实 API key 写进 `book.json`、脚本、测试、README 或提交到 git。
+- 只在当前 shell、用户自己的 shell 配置文件、系统 keychain/secret manager、
+  CI secret 中设置 `STORYBOOK_IMAGE_API_KEY`。
+- `doctor` 只会报告 `image_api_key_set: true/false`,不会打印 key。
+
 ### 供应商尺寸对照(竖版约 2:3 优先)
 
 | 供应商 | BASE_URL | MODEL 示例 | 建议 SIZE |

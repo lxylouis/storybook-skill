@@ -109,11 +109,28 @@ class TestExport(unittest.TestCase):
             html = Path(out["html"]).read_text(encoding="utf-8")
             self.assertIn('id="cinemabtn"', html)
             self.assertIn('id="theaterbtn"', html)
+            header = html.split("<header>", 1)[1].split("</header>", 1)[0]
+            speakrow = html.split('id="speakrow"', 1)[1].split("</div>", 1)[0]
+            self.assertIn('id="cinemabtn"', header)
+            self.assertIn('id="theaterbtn"', header)
+            self.assertLess(header.index('id="theaterbtn"'), header.index('id="printbtn"'))
+            self.assertNotIn('id="cinemabtn"', speakrow)
+            self.assertNotIn('id="theaterbtn"', speakrow)
             self.assertIn("function startCinema", html)
             self.assertIn("function renderPerfSetup", html)
             self.assertIn("function drawCompositeFrame", html)
+            self.assertIn('id="th-finish"', html)
+            self.assertIn("function waitForPerfVideoReady", html)
+            self.assertIn("function resetPerfRecording", html)
+            self.assertIn("recording: false, session: 0", html)
+            self.assertIn("rec.onstop = function ()", html)
+            self.assertIn("session !== perf.session", html)
             self.assertIn("captureStream", html)
             self.assertIn("storybook-theater.webm", html)
+            self.assertIn("max-height: calc(100dvh - 88px)", html)
+            self.assertIn("overflow: hidden", html)
+            self.assertIn("cinema-mode", html)
+            self.assertIn('root.classList.toggle("cinema-mode"', html)
 
 
 class TestExportSecurity(unittest.TestCase):

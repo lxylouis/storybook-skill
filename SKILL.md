@@ -71,7 +71,10 @@ prompt**。然后:
    `_BASE_URL/_MODEL/_SIZE`,OpenAI images 兼容)。**用户的 key 是阿里云百炼
    (DashScope)时改用 `scripts/gen_image_dashscope.py`**(参数与环境变量同款,
    原生 multimodal-generation 格式,默认 wan2.7-image)。`doctor` 可查配置是否
-   就绪;两者都没有时如实告诉用户需要配置哪一样,不要假装出图。
+   就绪;两者都没有时如实告诉用户需要配置哪一样,不要假装出图。**不要把真实
+   API key 写入脚本、book.json、README、测试或提交到 git;只通过环境变量、
+   keychain/secret manager 或 CI secret 注入。`doctor` 只报告 key 是否已设置,
+   不打印 key 本身。**
 
 两轨殊途同归:`save-image --page <id> --file <生成的图>`。
 
